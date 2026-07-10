@@ -32,10 +32,9 @@ if (!defined('ABSPATH')) {
 // lumitalk_endpoints(). Individual URIs can still be force-overridden with
 // LUMITALK_CONNECT_BASE / LUMITALK_API_URL / LUMITALK_WIDGET_SRC /
 // LUMITALK_AGENT_BASE for a non-standard setup.
-// NOTE: default is dev (appdev) while the marketplace-connect endpoints roll out to
-// prod. Flip to https://app.lumitalk.ai once prod has them — no other change needed.
+// Production default. The dev/staging build (appdev URLs) lives on the 'dev' branch.
 if (!defined('LUMITALK_APP_BASE')) {
-    define('LUMITALK_APP_BASE', 'https://appdev.lumitalk.ai');
+    define('LUMITALK_APP_BASE', 'https://app.lumitalk.ai');
 }
 
 define('LUMITALK_OPTION', 'lumitalk_settings');
@@ -69,12 +68,12 @@ function lumitalk_endpoints() {
     $s = get_option(LUMITALK_OPTION, array());
     // Base: saved app_base setting > LUMITALK_APP_BASE constant > dev default.
     $app = !empty($s['app_base']) ? $s['app_base']
-        : ((defined('LUMITALK_APP_BASE') && LUMITALK_APP_BASE) ? LUMITALK_APP_BASE : 'https://appdev.lumitalk.ai');
+        : ((defined('LUMITALK_APP_BASE') && LUMITALK_APP_BASE) ? LUMITALK_APP_BASE : 'https://app.lumitalk.ai');
     $app = untrailingslashit($app);
 
     $parts  = wp_parse_url($app);
     $scheme = !empty($parts['scheme']) ? $parts['scheme'] : 'https';
-    $host   = !empty($parts['host'])   ? $parts['host']   : 'appdev.lumitalk.ai';
+    $host   = !empty($parts['host'])   ? $parts['host']   : 'app.lumitalk.ai';
     $port   = !empty($parts['port'])   ? ':' . $parts['port'] : '';
 
     if (in_array($host, array('localhost', '127.0.0.1'), true)) {
