@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: LumiTalk AI
- * Plugin URI: https://lumitalk.ai
+ * Plugin URI: https://github.com/Nishant7428/lumitalk-wp
  * Description: AI-powered omnichannel customer service for WooCommerce. Connects your store to LumiTalk and adds the AI chat widget to your storefront.
  * Version: 1.2.2
  * Author: LumiTalk
