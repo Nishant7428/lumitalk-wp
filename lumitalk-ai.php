@@ -647,10 +647,15 @@ function lumitalk_render_preconnect($s, $notice_error, $notice_disc) {
     $source     = lumitalk_detect_source();
     $store_host = preg_replace('#^https?://#', '', lumitalk_store_url());
     $admin_mail = wp_get_current_user()->user_email;
+    $logo       = esc_url(lumitalk_app_base() . '/lumitalk_logo.png');
     ?>
-    <div class="wrap lumi-wrap">
-        <div class="lumi-card">
-            <div class="lumi-brand">LumiTalk&nbsp;AI</div>
+    <div class="lumi-app">
+        <div class="lumi-hd"><div class="lumi-hd-in">
+            <img src="<?php echo esc_url($logo); ?>" alt="LumiTalk" onerror="this.style.display='none'" />
+            <div><div class="t">LumiTalk AI</div><div class="s">Connect your store</div></div>
+        </div></div>
+
+        <div class="lumi-body"><div class="lumi-panel">
             <?php if ('' !== $notice_error) : ?><div class="lumi-alert err"><?php echo esc_html($notice_error); ?></div><?php endif; ?>
             <?php if ($notice_disc) : ?><div class="lumi-alert ok">Disconnected from LumiTalk.</div><?php endif; ?>
 
@@ -679,7 +684,7 @@ function lumitalk_render_preconnect($s, $notice_error, $notice_disc) {
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <input type="hidden" name="action" value="lumitalk_connect" />
                 <?php wp_nonce_field('lumitalk_connect'); ?>
-                <button type="submit" class="lumi-btn">Connect to LumiTalk</button>
+                <button type="submit" class="lumi-b primary" style="width:100%;">Connect to LumiTalk</button>
                 <p class="lumi-note">
                     <?php echo ($source === 'woocommerce')
                         ? 'We create a read-only WooCommerce API key for you &mdash; no keys to copy by hand.'
@@ -691,39 +696,49 @@ function lumitalk_render_preconnect($s, $notice_error, $notice_disc) {
                     <input type="url" name="app_base" value="<?php echo esc_attr(lumitalk_app_base()); ?>" />
                 </details>
             </form>
-        </div>
-        <p class="lumi-foot">&copy; <?php echo esc_html(gmdate('Y')); ?> LumiTalk &bull; <a href="mailto:support@lumitalk.ai">Contact Support</a></p>
+        </div></div>
+        <div class="lumi-foot">&copy; <?php echo esc_html(gmdate('Y')); ?> LumiTalk &bull; Need help? <a href="mailto:support@lumitalk.ai">Contact Support</a></div>
     </div>
     <?php
 }
 
 // -- Native onboarding wizard (steps) ----------------------------------------
 function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) {
-    $steps = array('channels' => 'Channels', 'plan' => 'Plan', 'assistant' => 'AI Assistant', 'review' => 'Review');
+    $steps = array('channels' => 'Channels', 'plan' => 'Plan', 'assistant' => 'Assistant', 'review' => 'Review');
     $keys  = array_keys($steps);
     $idx   = array_search($step, $keys, true);
+    $prev  = ($idx > 0) ? $keys[$idx - 1] : '';
     $ch    = isset($state['channels']) && is_array($state['channels']) ? $state['channels'] : array();
+    $logo  = esc_url(lumitalk_app_base() . '/lumitalk_logo.png');
     ?>
-    <div class="wrap lumi-wrap">
-        <div class="lumi-card lumi-wiz">
-            <div class="lumi-brand">LumiTalk&nbsp;AI</div>
-            <ol class="lumi-steps">
-                <?php $i = 0; foreach ($steps as $k => $label) : $cls = ($i < $idx) ? 'done' : (($i === $idx) ? 'now' : ''); ?>
-                    <li class="<?php echo esc_attr($cls); ?>"><span><?php echo esc_html((string) ($i + 1)); ?></span><?php echo esc_html($label); ?></li>
-                <?php $i++; endforeach; ?>
-            </ol>
+    <div class="lumi-app">
+        <div class="lumi-hd"><div class="lumi-hd-in">
+            <img src="<?php echo esc_url($logo); ?>" alt="LumiTalk" onerror="this.style.display='none'" />
+            <div><div class="t">Setup Wizard</div><div class="s">Configure your AI assistant</div></div>
+        </div></div>
 
-            <?php if ('' !== $notice_error) : ?><div class="lumi-alert err"><?php echo esc_html($notice_error); ?></div><?php endif; ?>
-            <?php if ($billing === 'success') : ?><div class="lumi-alert ok">Subscription active. Let&rsquo;s finish setting up your assistant.</div><?php endif; ?>
-            <?php if ($billing === 'cancel') : ?><div class="lumi-alert warn">Checkout canceled &mdash; pick a plan to continue.</div><?php endif; ?>
+        <div class="lumi-prog">
+            <?php $i = 0; foreach ($steps as $k => $label) :
+                $cls = ($i < $idx) ? 'done' : (($i === $idx) ? 'now' : ''); ?>
+                <?php if ($i > 0) : ?><div class="lumi-line <?php echo ($i <= $idx) ? 'done' : ''; ?>"></div><?php endif; ?>
+                <div class="lumi-st <?php echo esc_attr($cls); ?>">
+                    <div class="b"><?php echo ($i < $idx) ? '&#10003;' : esc_html((string) ($i + 1)); ?></div>
+                    <div class="l"><?php echo esc_html($label); ?></div>
+                </div>
+            <?php $i++; endforeach; ?>
+        </div>
 
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <?php wp_nonce_field('lumitalk_onb'); ?>
+        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+            <?php wp_nonce_field('lumitalk_onb'); ?>
+            <div class="lumi-body"><div class="lumi-panel">
+                <?php if ('' !== $notice_error) : ?><div class="lumi-alert err"><?php echo esc_html($notice_error); ?></div><?php endif; ?>
+                <?php if ($billing === 'success') : ?><div class="lumi-alert ok">Subscription active. Let&rsquo;s finish setting up your assistant.</div><?php endif; ?>
+                <?php if ($billing === 'cancel') : ?><div class="lumi-alert warn">Checkout canceled &mdash; pick a plan to continue.</div><?php endif; ?>
 
                 <?php if ($step === 'channels') : ?>
                     <input type="hidden" name="action" value="lumitalk_onb_channels" />
                     <h1>Which channels should the AI handle?</h1>
-                    <p class="lumi-sub">Chat runs on your storefront. Voice, SMS and email need a phone/email set up in the LumiTalk dashboard afterward.</p>
+                    <p class="lumi-sub">Chat runs on your storefront. Voice, SMS and email are set up in the LumiTalk dashboard afterward.</p>
                     <?php
                     $opts = array(
                         'chat'  => array('&#128172; AI Chat', 'Chat widget on your storefront'),
@@ -738,7 +753,6 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                             <span><strong><?php echo wp_kses_post($o[0]); ?></strong><small><?php echo esc_html($o[1]); ?></small></span>
                         </label>
                     <?php endforeach; ?>
-                    <div class="lumi-actions"><button type="submit" class="lumi-btn">Continue</button></div>
 
                 <?php elseif ($step === 'plan') : ?>
                     <input type="hidden" name="action" value="lumitalk_onb_plan" />
@@ -753,25 +767,25 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                     $seen_tiers = array();
                     if (empty($plans)) : ?>
                         <div class="lumi-alert warn">Couldn&rsquo;t load plans right now. <a href="<?php echo esc_url(add_query_arg(array('page' => 'lumitalk-ai', 'step' => 'plan'), admin_url('admin.php'))); ?>">Retry</a>.</div>
-                    <?php else :
-                        foreach ($plans as $plan) :
+                    <?php else : ?>
+                        <div class="lumi-plans">
+                        <?php foreach ($plans as $plan) :
                             $tier = isset($plan['metadata']['tier']) ? $plan['metadata']['tier'] : '';
                             if ($tier === '' || isset($seen_tiers[$tier])) { continue; }
                             $seen_tiers[$tier] = true;
                             $price = lumitalk_plan_price($plan);
                             $val   = $plan['id'] . '|' . $price['id'] . '|' . $tier;
-                            $checked = ($tier === 'free'); ?>
-                            <label class="lumi-plan">
+                            $badge = ($tier === 'professional') ? 'RECOMMENDED' : '';
+                            $checked = (!empty($state['selectedPlan']) ? ($state['selectedPlan'] === $plan['id']) : ($tier === 'free')); ?>
+                            <label class="lumi-plan<?php echo $checked ? ' sel' : ''; ?>">
+                                <?php if ($badge) : ?><span class="badge"><?php echo esc_html($badge); ?></span><?php endif; ?>
                                 <input type="radio" name="plan" value="<?php echo esc_attr($val); ?>" data-name="<?php echo esc_attr($plan['name']); ?>" <?php checked($checked); ?> />
-                                <span class="lumi-plan-name"><?php echo esc_html($plan['name']); ?></span>
-                                <span class="lumi-plan-price"><?php echo esc_html($price['display'] ? $price['display'] : 'Free'); ?><?php echo $price['interval'] ? '<small>/' . esc_html($price['interval']) . '</small>' : ''; ?></span>
+                                <div class="lumi-plan-name"><?php echo esc_html(ucfirst($tier)); ?></div>
+                                <div class="lumi-plan-price"><?php echo esc_html($price['display'] ? $price['display'] : 'Free'); ?><?php echo $price['interval'] ? '<small>/' . esc_html($price['interval']) . '</small>' : ''; ?></div>
                             </label>
-                        <?php endforeach;
-                    endif; ?>
-                    <div class="lumi-actions">
-                        <a class="lumi-link" href="<?php echo esc_url(add_query_arg(array('page' => 'lumitalk-ai', 'step' => 'channels'), admin_url('admin.php'))); ?>">&larr; Back</a>
-                        <button type="submit" class="lumi-btn">Continue</button>
-                    </div>
+                        <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
 
                 <?php elseif ($step === 'assistant') : ?>
                     <input type="hidden" name="action" value="lumitalk_onb_assistant" />
@@ -809,10 +823,6 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                             <?php endforeach; ?>
                         </div>
                     </div>
-                    <div class="lumi-actions">
-                        <a class="lumi-link" href="<?php echo esc_url(add_query_arg(array('page' => 'lumitalk-ai', 'step' => 'plan'), admin_url('admin.php'))); ?>">&larr; Back</a>
-                        <button type="submit" class="lumi-btn">Continue</button>
-                    </div>
 
                 <?php else : // review ?>
                     <input type="hidden" name="action" value="lumitalk_onb_launch" />
@@ -825,18 +835,23 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                     <h1>Review &amp; launch</h1>
                     <p class="lumi-sub">Everything looks good? Launch to make your AI assistant live.</p>
                     <table class="lumi-review">
-                        <tr><th>Assistant</th><td><?php echo esc_html(!empty($a['name']) ? $a['name'] : '—'); ?></td></tr>
+                        <tr><th>Assistant</th><td><?php echo esc_html(!empty($a['name']) ? $a['name'] : '&mdash;'); ?></td></tr>
                         <tr><th>Channels</th><td><?php echo esc_html($enabled ? implode(', ', $enabled) : 'Chat'); ?></td></tr>
-                        <tr><th>Plan</th><td><?php echo esc_html(!empty($state['selectedPlan']) ? $state['selectedPlan'] : 'Free'); ?></td></tr>
                         <tr><th>Products synced</th><td><?php echo esc_html((string) $know); ?></td></tr>
                     </table>
-                    <div class="lumi-actions">
-                        <a class="lumi-link" href="<?php echo esc_url(add_query_arg(array('page' => 'lumitalk-ai', 'step' => 'assistant'), admin_url('admin.php'))); ?>">&larr; Back</a>
-                        <button type="submit" class="lumi-btn">Launch my assistant &#128640;</button>
-                    </div>
                 <?php endif; ?>
-            </form>
-        </div>
+            </div></div>
+
+            <div class="lumi-nav">
+                <?php if ($prev) : ?>
+                    <a class="lumi-b secondary" href="<?php echo esc_url(add_query_arg(array('page' => 'lumitalk-ai', 'step' => $prev), admin_url('admin.php'))); ?>">&larr; Back</a>
+                <?php else : ?><span></span><?php endif; ?>
+                <span class="lumi-pill">Step <?php echo esc_html((string) ($idx + 1)); ?> of <?php echo esc_html((string) count($steps)); ?></span>
+                <button type="submit" class="lumi-b primary"><?php echo ($step === 'review') ? 'Launch &#128640;' : 'Continue &rarr;'; ?></button>
+            </div>
+        </form>
+
+        <div class="lumi-foot">&copy; <?php echo esc_html(gmdate('Y')); ?> LumiTalk &bull; Need help? <a href="mailto:support@lumitalk.ai">Contact Support</a></div>
     </div>
     <?php
 }
@@ -852,13 +867,18 @@ function lumitalk_render_dashboard($s, $state, $notice_launch) {
     $widget_live = !empty($s['widget_enabled']) && !empty($s['widget_key']);
     $toggle = wp_nonce_url(admin_url('admin-post.php?action=lumitalk_toggle_widget'), 'lumitalk_toggle_widget');
     $edit   = add_query_arg(array('page' => 'lumitalk-ai', 'step' => 'channels'), admin_url('admin.php'));
+    $logo   = esc_url(lumitalk_app_base() . '/lumitalk_logo.png');
     ?>
-    <div class="wrap lumi-wrap">
-        <div class="lumi-card lumi-dash">
-            <div class="lumi-brand">LumiTalk&nbsp;AI</div>
+    <div class="lumi-app">
+        <div class="lumi-hd"><div class="lumi-hd-in">
+            <img src="<?php echo esc_url($logo); ?>" alt="LumiTalk" onerror="this.style.display='none'" />
+            <div><div class="t">LumiTalk AI</div><div class="s">Dashboard</div></div>
+        </div></div>
+
+        <div class="lumi-body"><div class="lumi-panel">
             <?php if ($notice_launch) : ?><div class="lumi-alert ok">&#127881; Your AI assistant is live!</div><?php endif; ?>
             <h1><?php echo esc_html($app_name); ?></h1>
-            <p class="lumi-sub">Your assistant is set up. Manage conversations and advanced settings in the LumiTalk agent panel.</p>
+            <p class="lumi-sub">Your assistant is set up. Manage conversations in the LumiTalk agent panel.</p>
 
             <div class="lumi-stats">
                 <div class="lumi-stat"><em>Storefront widget</em><strong class="<?php echo $widget_live ? 'live' : 'off'; ?>"><?php echo $widget_live ? 'Live' : 'Off'; ?></strong></div>
@@ -868,11 +888,12 @@ function lumitalk_render_dashboard($s, $state, $notice_launch) {
             </div>
 
             <div class="lumi-actions">
-                <button id="lumitalk-open-agent" class="lumi-btn">Open Agent Panel &#8599;</button>
-                <a class="lumi-btn ghost" href="<?php echo esc_url($edit); ?>">Edit configuration</a>
+                <button id="lumitalk-open-agent" class="lumi-b primary">Open Agent Panel &#8599;</button>
+                <a class="lumi-b secondary" href="<?php echo esc_url($edit); ?>">Edit configuration</a>
                 <a class="lumi-link" href="<?php echo esc_url($toggle); ?>"><?php echo $widget_live ? 'Turn widget off' : 'Turn widget on'; ?></a>
             </div>
-        </div>
+        </div></div>
+        <div class="lumi-foot">&copy; <?php echo esc_html(gmdate('Y')); ?> LumiTalk &bull; Need help? <a href="mailto:support@lumitalk.ai">Contact Support</a></div>
     </div>
     <?php
 }
@@ -891,10 +912,14 @@ function lumitalk_render_settings() {
     $edit = add_query_arg(array('page' => 'lumitalk-ai', 'step' => 'channels'), admin_url('admin.php'));
     $widget_live = !empty($s['widget_enabled']) && !empty($s['widget_key']);
     $toggle = wp_nonce_url(admin_url('admin-post.php?action=lumitalk_toggle_widget'), 'lumitalk_toggle_widget');
+    $logo   = esc_url(lumitalk_app_base() . '/lumitalk_logo.png');
     ?>
-    <div class="wrap lumi-wrap">
-        <div class="lumi-card">
-            <div class="lumi-brand">LumiTalk&nbsp;AI</div>
+    <div class="lumi-app">
+        <div class="lumi-hd"><div class="lumi-hd-in">
+            <img src="<?php echo esc_url($logo); ?>" alt="LumiTalk" onerror="this.style.display='none'" />
+            <div><div class="t">LumiTalk AI</div><div class="s">Settings</div></div>
+        </div></div>
+        <div class="lumi-body"><div class="lumi-panel">
             <?php if ($saved) : ?><div class="lumi-alert ok">Saved.</div><?php endif; ?>
             <h1>Settings</h1>
 
@@ -905,7 +930,7 @@ function lumitalk_render_settings() {
             </table>
 
             <div class="lumi-actions">
-                <a class="lumi-btn" href="<?php echo esc_url($edit); ?>">Edit AI configuration</a>
+                <a class="lumi-b primary" href="<?php echo esc_url($edit); ?>">Edit AI configuration</a>
             </div>
 
             <details class="lumi-adv">
@@ -913,7 +938,8 @@ function lumitalk_render_settings() {
                 <p class="lumi-note">LumiTalk app URL: <code><?php echo esc_html(lumitalk_app_base()); ?></code></p>
                 <p class="lumi-note">Remove the LumiTalk connection from this store: <a href="<?php echo esc_url($disconnect); ?>" style="color:#b32d2e;">Disconnect</a></p>
             </details>
-        </div>
+        </div></div>
+        <div class="lumi-foot">&copy; <?php echo esc_html(gmdate('Y')); ?> LumiTalk &bull; Need help? <a href="mailto:support@lumitalk.ai">Contact Support</a></div>
     </div>
     <?php
 }
@@ -925,79 +951,115 @@ function lumitalk_render_agent() {
         echo '<div class="wrap"><h1>Agent Panel</h1><p>Connect to LumiTalk first from the <strong>Dashboard</strong> tab.</p></div>';
         return;
     }
+    $logo = esc_url(lumitalk_app_base() . '/lumitalk_logo.png');
     ?>
-    <div class="wrap lumi-wrap">
-        <div class="lumi-card" style="text-align:center;">
-            <div class="lumi-brand">LumiTalk&nbsp;AI</div>
+    <div class="lumi-app">
+        <div class="lumi-hd"><div class="lumi-hd-in">
+            <img src="<?php echo esc_url($logo); ?>" alt="LumiTalk" onerror="this.style.display='none'" />
+            <div><div class="t">LumiTalk AI</div><div class="s">Agent Panel</div></div>
+        </div></div>
+        <div class="lumi-body"><div class="lumi-panel" style="text-align:center;">
             <h1>Your Agent Dashboard</h1>
             <p class="lumi-sub" style="margin-left:auto;margin-right:auto;">Manage conversations, AI agents, and your inbox in the LumiTalk agent panel. Opens in a new tab, already signed in.</p>
             <div class="lumi-actions" style="justify-content:center;">
-                <button id="lumitalk-open-agent" class="lumi-btn">Open Agent Dashboard &#8599;</button>
+                <button id="lumitalk-open-agent" class="lumi-b primary">Open Agent Dashboard &#8599;</button>
             </div>
-        </div>
+        </div></div>
+        <div class="lumi-foot">&copy; <?php echo esc_html(gmdate('Y')); ?> LumiTalk &bull; Need help? <a href="mailto:support@lumitalk.ai">Contact Support</a></div>
     </div>
     <?php
 }
 
 // -- Admin CSS / JS (enqueued as inline on our pages) ------------------------
 function lumitalk_admin_css() {
+    // Matches the LumiTalk app onboarding (Shopify ConfigWizard): full-bleed slate
+    // gradient, sticky header, circular step indicator, rounded-3xl card, slate-900
+    // primary buttons, pink-accent plan cards.
     return '
-    .lumi-wrap{max-width:720px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
-    .lumi-card{background:#fff;border:1px solid #eef0f3;border-radius:18px;padding:32px;margin:16px 0;box-shadow:0 12px 30px -18px rgba(15,23,42,.25);}
-    .lumi-brand{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#fe87a4;margin-bottom:14px;}
-    .lumi-card h1{font-size:24px;font-weight:800;color:#0f172a;margin:0 0 8px;}
-    .lumi-sub{font-size:14.5px;color:#475569;line-height:1.6;margin:0 0 22px;max-width:56ch;}
-    .lumi-alert{border-radius:11px;padding:11px 15px;font-size:13.5px;margin:0 0 18px;}
-    .lumi-alert.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;}
+    #wpcontent{padding-left:0!important}#wpbody-content{padding:0!important}
+    #wpfooter{display:none!important}#wpbody-content>.notice,#wpbody-content>.update-nag{display:none!important}
+    .lumi-app{min-height:calc(100vh - 32px);background:linear-gradient(135deg,#f8fafc 0%,#ffffff 45%,#f1f5f9 100%);
+        font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#0f172a;}
+    .lumi-app *{box-sizing:border-box;}
+    .lumi-hd{position:sticky;top:32px;z-index:30;background:rgba(255,255,255,.82);backdrop-filter:blur(8px);border-bottom:1px solid #e2e8f0;}
+    .lumi-hd-in{max-width:56rem;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:12px;}
+    .lumi-hd img{height:42px;width:auto;}
+    .lumi-hd .t{font-size:14px;font-weight:600;color:#0f172a;line-height:1.2;}
+    .lumi-hd .s{font-size:12px;color:#64748b;}
+    .lumi-prog{max-width:56rem;margin:0 auto;padding:26px 24px 6px;display:flex;align-items:center;justify-content:center;gap:6px;}
+    .lumi-st{display:flex;flex-direction:column;align-items:center;}
+    .lumi-st .b{width:40px;height:40px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;background:#f1f5f9;color:#94a3b8;box-shadow:inset 0 0 0 1px #e2e8f0;}
+    .lumi-st.now .b{background:#0f172a;color:#fff;box-shadow:0 8px 20px -6px rgba(15,23,42,.45);}
+    .lumi-st.done .b{background:#ecfdf5;color:#059669;box-shadow:inset 0 0 0 1px #a7f3d0;}
+    .lumi-st .l{margin-top:8px;font-size:11px;font-weight:500;color:#94a3b8;}
+    .lumi-st.now .l{color:#0f172a;}.lumi-st.done .l{color:#059669;}
+    .lumi-line{height:2px;width:38px;border-radius:2px;background:#e2e8f0;margin:0 2px 22px;}
+    .lumi-line.done{background:#a7f3d0;}
+    .lumi-body{max-width:48rem;margin:0 auto;padding:18px 24px 8px;}
+    .lumi-panel{background:#fff;border:1px solid #e2e8f0;border-radius:24px;padding:34px;box-shadow:0 24px 48px -24px rgba(148,163,184,.55);}
+    .lumi-panel h1{font-size:22px;font-weight:800;color:#0f172a;margin:0 0 6px;letter-spacing:-.01em;}
+    .lumi-sub{font-size:14px;color:#64748b;line-height:1.6;margin:0 0 24px;}
+    .lumi-brand{display:none;}
+    .lumi-b{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:12px 22px;font-size:14px;font-weight:600;cursor:pointer;border:0;text-decoration:none;line-height:1.2;transition:.15s;}
+    .lumi-b.primary{background:#0f172a;color:#fff;}.lumi-b.primary:hover{background:#1e293b;color:#fff;}
+    .lumi-b.secondary{background:#fff;color:#0f172a;box-shadow:inset 0 0 0 1px #e2e8f0;}.lumi-b.secondary:hover{background:#f8fafc;color:#0f172a;}
+    .lumi-b:disabled{opacity:.5;cursor:not-allowed;}
+    .lumi-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:12px 22px;font-size:14px;font-weight:600;cursor:pointer;border:0;text-decoration:none;line-height:1.2;background:#0f172a;color:#fff;transition:.15s;}
+    .lumi-btn:hover{background:#1e293b;color:#fff;}
+    .lumi-btn.ghost{background:#fff;color:#0f172a;box-shadow:inset 0 0 0 1px #e2e8f0;}.lumi-btn.ghost:hover{background:#f8fafc;color:#0f172a;}
+    .lumi-pill{display:inline-flex;align-items:center;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:500;background:#f8fafc;color:#475569;box-shadow:inset 0 0 0 1px #e2e8f0;}
+    .lumi-link{color:#475569;text-decoration:none;font-size:13px;font-weight:600;}.lumi-link:hover{color:#0f172a;}
+    .lumi-note{font-size:12.5px;color:#94a3b8;margin:14px 0 0;}
+    .lumi-nav{max-width:48rem;margin:22px auto 0;padding:0 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;}
+    .lumi-actions{display:flex;align-items:center;gap:14px;margin-top:26px;flex-wrap:wrap;}
+    .lumi-foot{max-width:48rem;margin:34px auto 0;padding:0 24px 30px;text-align:center;font-size:12px;color:#94a3b8;}
+    .lumi-foot a{color:#475569;}
+    .lumi-alert{border-radius:12px;padding:12px 16px;font-size:13.5px;margin:0 0 18px;}
+    .lumi-alert.ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;}
     .lumi-alert.err{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;}
     .lumi-alert.warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e;}
     .lumi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 22px;}
-    .lumi-tile{border:1px solid #eef0f3;border-radius:12px;padding:12px 14px;background:#fbfcfe;}
+    .lumi-tile{border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px;background:#f8fafc;}
     .lumi-tile strong{display:block;font-size:13.5px;color:#0f172a;}
     .lumi-tile span{font-size:12px;color:#64748b;}
-    .lumi-meta{display:flex;flex-wrap:wrap;gap:8px 22px;background:#f8fafc;border-radius:12px;padding:14px 16px;margin:0 0 22px;font-size:13px;}
+    .lumi-meta{display:flex;flex-wrap:wrap;gap:8px 22px;background:#f8fafc;border-radius:14px;padding:14px 16px;margin:0 0 22px;font-size:13px;}
     .lumi-meta em{color:#94a3b8;font-style:normal;margin-right:6px;}
-    .lumi-btn{display:inline-flex;align-items:center;gap:7px;background:#fe87a4;color:#fff;border:0;border-radius:11px;padding:12px 24px;font-size:14.5px;font-weight:700;cursor:pointer;text-decoration:none;line-height:1.2;}
-    .lumi-btn:hover{color:#fff;filter:brightness(.97);}
-    .lumi-btn.ghost{background:#fff;color:#0f172a;border:1px solid #d7dce3;}
-    .lumi-link{color:#64748b;text-decoration:none;font-size:13.5px;font-weight:600;}
-    .lumi-note{font-size:12.5px;color:#94a3b8;margin:12px 0 0;}
-    .lumi-foot{text-align:center;font-size:12px;color:#94a3b8;margin:14px 0 0;}
-    .lumi-actions{display:flex;align-items:center;gap:16px;margin-top:24px;flex-wrap:wrap;}
-    .lumi-steps{display:flex;gap:8px;list-style:none;margin:0 0 24px;padding:0;}
-    .lumi-steps li{flex:1;font-size:11.5px;font-weight:600;color:#94a3b8;text-align:center;border-top:3px solid #eef0f3;padding-top:8px;}
-    .lumi-steps li span{display:block;width:22px;height:22px;line-height:22px;border-radius:50%;background:#eef0f3;color:#94a3b8;margin:0 auto 4px;font-weight:800;}
-    .lumi-steps li.now{color:#fe87a4;border-top-color:#fe87a4;}
-    .lumi-steps li.now span{background:#fe87a4;color:#fff;}
-    .lumi-steps li.done{color:#166534;border-top-color:#86efac;}
-    .lumi-steps li.done span{background:#86efac;color:#166534;}
-    .lumi-check{display:flex;gap:12px;align-items:center;border:1px solid #eef0f3;border-radius:12px;padding:13px 16px;margin:0 0 10px;cursor:pointer;}
-    .lumi-check input{width:18px;height:18px;}
+    .lumi-meta code{background:transparent;color:#0f172a;}
+    .lumi-check{display:flex;gap:12px;align-items:center;border:1.5px solid #e2e8f0;border-radius:14px;padding:14px 16px;margin:0 0 10px;cursor:pointer;transition:.15s;}
+    .lumi-check:hover{border-color:#cbd5e1;}
+    .lumi-check:has(input:checked){border-color:#ec4899;background:#fdf2f8;}
+    .lumi-check input{width:18px;height:18px;accent-color:#ec4899;}
     .lumi-check strong{display:block;font-size:14px;color:#0f172a;}
     .lumi-check small{color:#64748b;font-size:12.5px;}
-    .lumi-plan{display:flex;align-items:center;gap:12px;border:1px solid #eef0f3;border-radius:12px;padding:14px 16px;margin:0 0 10px;cursor:pointer;}
-    .lumi-plan.sel{border-color:#fe87a4;box-shadow:0 0 0 2px rgba(254,135,164,.25);}
-    .lumi-plan-name{flex:1;font-weight:700;color:#0f172a;font-size:14.5px;}
-    .lumi-plan-price{font-weight:800;color:#0f172a;}
-    .lumi-plan-price small{color:#94a3b8;font-weight:600;}
+    .lumi-plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:6px 0 4px;}
+    .lumi-plan{position:relative;border:2px solid #cbd5e1;border-radius:14px;padding:20px 14px 14px;cursor:pointer;transition:.15s;text-align:center;display:block;}
+    .lumi-plan:hover{border-color:#fda4b8;box-shadow:0 8px 18px -8px rgba(0,0,0,.15);}
+    .lumi-plan.sel{border-color:#ec4899;background:#fdf2f8;box-shadow:0 10px 22px -8px rgba(236,72,153,.4);}
+    .lumi-plan input{position:absolute;opacity:0;pointer-events:none;}
+    .lumi-plan .badge{position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:#db2777;color:#fff;font-size:9px;font-weight:800;padding:3px 10px;border-radius:999px;white-space:nowrap;letter-spacing:.04em;}
+    .lumi-plan-name{font-size:13px;font-weight:700;color:#0f172a;margin:0 0 4px;}
+    .lumi-plan-price{font-size:20px;font-weight:800;color:#db2777;}
+    .lumi-plan-price small{font-size:11px;color:#64748b;font-weight:500;}
     .lumi-field{display:block;font-size:13px;font-weight:600;color:#334155;margin:0 0 16px;}
-    .lumi-field input[type=text],.lumi-field textarea,.lumi-field select{display:block;width:100%;margin-top:6px;padding:9px 12px;border:1px solid #d7dce3;border-radius:9px;font-size:13.5px;color:#0f172a;font-weight:400;}
+    .lumi-field input[type=text],.lumi-field textarea,.lumi-field select{display:block;width:100%;margin-top:6px;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:13.5px;color:#0f172a;font-weight:400;background:#fff;}
+    .lumi-field input:focus,.lumi-field textarea:focus,.lumi-field select:focus{outline:none;border-color:#94a3b8;box-shadow:0 0 0 3px rgba(148,163,184,.18);}
     .lumi-traits{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
-    .lumi-tag{display:inline-flex;align-items:center;gap:5px;border:1px solid #d7dce3;border-radius:20px;padding:6px 12px;font-size:12.5px;font-weight:500;color:#334155;cursor:pointer;}
-    .lumi-review{width:100%;border-collapse:collapse;margin:0 0 8px;}
-    .lumi-review th{text-align:left;padding:10px 0;color:#64748b;font-size:13px;font-weight:600;width:38%;border-bottom:1px solid #f1f5f9;vertical-align:top;}
-    .lumi-review td{padding:10px 0;color:#0f172a;font-size:13.5px;border-bottom:1px solid #f1f5f9;}
-    .lumi-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 8px;}
-    .lumi-stat{border:1px solid #eef0f3;border-radius:12px;padding:14px 16px;background:#fbfcfe;}
-    .lumi-stat em{display:block;font-style:normal;font-size:12px;color:#94a3b8;margin-bottom:4px;}
-    .lumi-stat strong{font-size:18px;color:#0f172a;}
-    .lumi-stat strong.live{color:#16a34a;}
-    .lumi-stat strong.off{color:#94a3b8;}
-    .lumi-adv{margin-top:20px;border-top:1px solid #eef0f3;padding-top:14px;}
+    .lumi-tag{display:inline-flex;align-items:center;gap:6px;border:1px solid #cbd5e1;border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:500;color:#334155;cursor:pointer;}
+    .lumi-tag:has(input:checked){border-color:#ec4899;background:#fdf2f8;color:#be185d;}
+    .lumi-tag input{accent-color:#ec4899;}
+    .lumi-review{width:100%;border-collapse:collapse;margin:4px 0;}
+    .lumi-review th{text-align:left;padding:12px 0;color:#64748b;font-size:13px;font-weight:600;width:40%;border-bottom:1px solid #f1f5f9;vertical-align:top;}
+    .lumi-review td{padding:12px 0;color:#0f172a;font-size:13.5px;font-weight:500;border-bottom:1px solid #f1f5f9;}
+    .lumi-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0;}
+    .lumi-stat{border:1px solid #e2e8f0;border-radius:14px;padding:16px;background:#f8fafc;}
+    .lumi-stat em{display:block;font-style:normal;font-size:12px;color:#94a3b8;margin-bottom:5px;}
+    .lumi-stat strong{font-size:18px;color:#0f172a;font-weight:800;}
+    .lumi-stat strong.live{color:#059669;}.lumi-stat strong.off{color:#94a3b8;}
+    .lumi-adv{margin-top:22px;border-top:1px solid #e2e8f0;padding-top:16px;}
     .lumi-adv summary{cursor:pointer;font-size:13px;color:#64748b;font-weight:600;}
     .lumi-adv label{display:block;font-size:12px;font-weight:600;color:#475569;margin:12px 0 5px;}
-    .lumi-adv input{width:100%;padding:9px 12px;border:1px solid #d7dce3;border-radius:9px;font-size:13px;}
-    @media(max-width:600px){.lumi-grid,.lumi-stats{grid-template-columns:1fr;}}
+    .lumi-adv input{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:13px;}
+    @media(max-width:600px){.lumi-grid,.lumi-stats{grid-template-columns:1fr;}.lumi-st .l{display:none;}.lumi-panel{padding:24px;}}
     ';
 }
 
