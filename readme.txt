@@ -1,10 +1,10 @@
 === LumiTalk AI ===
-Contributors: lumitalk
+Contributors: luminoustec
 Tags: ai, chatbot, customer service, live chat, woocommerce
 Requires at least: 5.8
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.2.2
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,8 +27,9 @@ the account and connecting happens from wp-admin when you click "Connect to Lumi
 = What it does =
 * One-click connect from wp-admin (auto-detects WooCommerce / EDD / plain WordPress)
 * Creates your LumiTalk account/application and links your store
+* A native step-by-step setup right inside wp-admin (choose channels, plan, and configure your AI assistant)
 * Adds the AI chat widget to your storefront
-* Enable/disable the widget and open the LumiTalk dashboard from wp-admin
+* Opens the LumiTalk agent panel (conversations/inbox) in a new tab, already signed in
 
 == External services ==
 
@@ -44,8 +45,11 @@ What data is sent, and when:
   onboarding. For WooCommerce, a read-only WooCommerce REST API key is generated and
   sent so LumiTalk can read your catalog; for other platforms a normalized product
   catalog (titles, descriptions, prices, categories, images) is sent directly.
-* **Embedded onboarding/dashboard:** after connecting, the LumiTalk app is shown in an
-  iframe inside wp-admin, authenticated with a token issued to your store.
+* **Native setup (via API):** after connecting, the setup screens run natively in
+  wp-admin and call the LumiTalk API (authenticated with a token issued to your store)
+  to save your channel, plan, and assistant choices. Nothing is embedded in an iframe.
+* **Agent panel:** a "Open Agent Panel" button opens the LumiTalk conversations/inbox
+  app in a new browser tab (signed in via a one-time token) — it is not embedded.
 * **Storefront chat widget:** once enabled, a widget script is loaded from LumiTalk on
   your public pages so visitors can chat with the AI. Visitor chat messages are sent to
   LumiTalk to generate replies.
@@ -79,6 +83,11 @@ No. WooCommerce stores get automatic catalog sync; Easy Digital Downloads, custo
 product types, and plain WordPress sites are supported too.
 
 == Changelog ==
+
+= 1.3.0 =
+* Native onboarding: setup now runs entirely inside wp-admin as native steps (channels,
+  plan, AI assistant, review/launch) that call the LumiTalk API — no iframe. The agent
+  panel opens in a new tab. Description made consistent (WordPress, not WooCommerce-only).
 
 = 1.2.2 =
 * Compliance & hardening: enqueue the storefront widget via wp_enqueue_script, escape
