@@ -349,19 +349,100 @@ function lumitalk_plan_price_for($plan, $interval) {
 // Personality traits (id => [emoji entity, label]) — mirrors the app wizard's set.
 function lumitalk_traits() {
     return array(
-        'friendly'      => array('&#128522;', 'Friendly'),
-        'professional'  => array('&#128188;', 'Professional'),
-        'helpful'       => array('&#129309;', 'Helpful'),
-        'enthusiastic'  => array('&#9889;', 'Enthusiastic'),
-        'patient'       => array('&#129496;', 'Patient'),
-        'knowledgeable' => array('&#127891;', 'Knowledgeable'),
-        'empathetic'    => array('&#10084;&#65039;', 'Empathetic'),
-        'concise'       => array('&#9986;&#65039;', 'Concise'),
+        'friendly'      => array(lumitalk_icon('smile'), 'Friendly'),
+        'professional'  => array(lumitalk_icon('briefcase'), 'Professional'),
+        'helpful'       => array(lumitalk_icon('users'), 'Helpful'),
+        'enthusiastic'  => array(lumitalk_icon('bolt'), 'Enthusiastic'),
+        'patient'       => array(lumitalk_icon('clock'), 'Patient'),
+        'knowledgeable' => array(lumitalk_icon('academic'), 'Knowledgeable'),
+        'empathetic'    => array(lumitalk_icon('heart'), 'Empathetic'),
+        'concise'       => array(lumitalk_icon('scissors'), 'Concise'),
     );
 }
 
 // Redirect helpers.
 // Agent roles for the "Choose Your Agent" picker (mirrors the app's agent templates).
+/**
+ * Inline Heroicons (24/outline) - the same icon set the LumiTalk app uses.
+ * Path data is static, extracted from the @heroicons/react package.
+ *
+ * @param string $name  Icon key.
+ * @param string $class Optional extra CSS class.
+ * @return string SVG markup, or an empty string for an unknown key.
+ */
+/**
+ * kses allowlist for the inline icons above. wp_kses_post() strips <svg>, so icon
+ * output is filtered through this instead of being echoed raw.
+ *
+ * @return array
+ */
+function lumitalk_svg_allowed() {
+    return array(
+        'svg'  => array(
+            'class' => true, 'xmlns' => true, 'fill' => true, 'viewbox' => true,
+            'stroke-width' => true, 'stroke' => true, 'aria-hidden' => true,
+            'focusable' => true, 'width' => true, 'height' => true,
+        ),
+        'path' => array(
+            'stroke-linecap' => true, 'stroke-linejoin' => true, 'd' => true,
+            'fill' => true, 'fill-rule' => true, 'clip-rule' => true,
+        ),
+    );
+}
+
+function lumitalk_icon($name, $class = '') {
+    static $paths = array(
+        'overview' => array('M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z'),
+        'billing' => array('M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z'),
+        'store' => array('M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349M3.75 21V9.349m0 0a3.001 3.001 0 0 0 3.75-.615A2.993 2.993 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 0 0 2.25 1.016c.896 0 1.7-.393 2.25-1.015a3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72l1.189-1.19A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72M6.75 18h3.75a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75H6.75a.75.75 0 0 0-.75.75v3.75c0 .414.336.75.75.75Z'),
+        'sparkles' => array('M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z'),
+        'globe' => array('M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418'),
+        'phone' => array('M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z'),
+        'stack' => array('M6.429 9.75 2.25 12l4.179 2.25m0-4.5 5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0L21.75 12l-4.179 2.25m0 0 4.179 2.25L12 21.75 2.25 16.5l4.179-2.25m11.142 0-5.571 3-5.571-3'),
+        'chat' => array('M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155'),
+        'sms' => array('M8.625 9.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 0 1 .778-.332 48.294 48.294 0 0 0 5.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z'),
+        'mail' => array('M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75'),
+        'mic' => array('M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z'),
+        'check' => array('m4.5 12.75 6 6 9-13.5'),
+        'play' => array('M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z'),
+        'list' => array('M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z'),
+        'headset' => array('M14.25 9.75v-4.5m0 4.5h4.5m-4.5 0 6-6m-3 18c-8.284 0-15-6.716-15-15V4.5A2.25 2.25 0 0 1 4.5 2.25h1.372c.516 0 .966.351 1.091.852l1.106 4.423c.11.44-.054.902-.417 1.173l-1.293.97a1.062 1.062 0 0 0-.38 1.21 12.035 12.035 0 0 0 7.143 7.143c.441.162.928-.004 1.21-.38l.97-1.293a1.125 1.125 0 0 1 1.173-.417l4.423 1.106c.5.125.852.575.852 1.091V19.5a2.25 2.25 0 0 1-2.25 2.25h-2.25Z'),
+        'user' => array('M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z'),
+        'target' => array('M15.042 21.672 13.684 16.6m0 0-2.51 2.225.569-9.47 5.227 7.917-3.286-.672ZM12 2.25V4.5m5.834.166-1.591 1.591M20.25 10.5H18M7.757 14.743l-1.59 1.59M6 10.5H3.75m4.007-4.243-1.59-1.59'),
+        'wrench' => array('M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z'),
+        'cog' => array('M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z', 'M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z'),
+        'package' => array('m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z'),
+        'calendar' => array('M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z'),
+        'bag' => array('M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z'),
+        'home' => array('M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.205 3 1m1.5.5-1.5-.5M6.75 7.364V3h-3v18m3-13.636 10.5-3.819'),
+        'receipt' => array('M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V13.5Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V18Zm2.498-6.75h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V13.5Zm0 2.25h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V18Zm2.504-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5Zm0 2.25h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V18Zm2.498-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5ZM8.25 6h7.5v2.25h-7.5V6ZM12 2.25c-1.892 0-3.758.11-5.593.322C5.307 2.7 4.5 3.65 4.5 4.757V19.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25V4.757c0-1.108-.806-2.057-1.907-2.185A48.507 48.507 0 0 0 12 2.25Z'),
+        'moon' => array('M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z'),
+        'smile' => array('M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z'),
+        'briefcase' => array('M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0M12 12.75h.008v.008H12v-.008Z'),
+        'users' => array('M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z'),
+        'bolt' => array('m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z'),
+        'clock' => array('M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'),
+        'academic' => array('M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5'),
+        'heart' => array('M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z'),
+        'scissors' => array('m7.848 8.25 1.536.887M7.848 8.25a3 3 0 1 1-5.196-3 3 3 0 0 1 5.196 3Zm1.536.887a2.165 2.165 0 0 1 1.083 1.839c.005.351.054.695.14 1.024M9.384 9.137l2.077 1.199M7.848 15.75l1.536-.887m-1.536.887a3 3 0 1 1-5.196 3 3 3 0 0 1 5.196-3Zm1.536-.887a2.165 2.165 0 0 0 1.083-1.838c.005-.352.054-.695.14-1.025m-1.223 2.863 2.077-1.199m0-3.328a4.323 4.323 0 0 1 2.068-1.379l5.325-1.628a4.5 4.5 0 0 1 2.48-.044l.803.215-7.794 4.5m-2.882-1.664A4.33 4.33 0 0 0 10.607 12m3.736 0 7.794 4.5-.802.215a4.5 4.5 0 0 1-2.48-.043l-5.326-1.629a4.324 4.324 0 0 1-2.068-1.379M14.343 12l-2.882 1.664'),
+        'plus' => array('M12 4.5v15m7.5-7.5h-15'),
+        'x' => array('M6 18 18 6M6 6l12 12'),
+        'refresh' => array('M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99'),
+        'link' => array('M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244'),
+        'shield' => array('M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z'),
+        'doc' => array('M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z'),
+        'building' => array('M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z'),
+    );
+    if (!isset($paths[ $name ])) { return ''; }
+    $d = '';
+    foreach ($paths[ $name ] as $p) {
+        $d .= '<path stroke-linecap="round" stroke-linejoin="round" d="' . esc_attr($p) . '" />';
+    }
+    $cls = 'lumi-ic' . ($class ? ' ' . $class : '');
+    return '<svg class="' . esc_attr($cls) . '" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"'
+        . ' stroke-width="1.5" stroke="currentColor" aria-hidden="true" focusable="false">' . $d . '</svg>';
+}
+
 /**
  * The 12 curated agent templates, in the same order and wording the LumiTalk app
  * uses. Icon + tagline live here; the persona text (description, first message and
@@ -372,18 +453,18 @@ function lumitalk_traits() {
  */
 function lumitalk_agent_roles() {
     return array(
-        'customer_support'        => array('&#127911;', 'Customer Support', 'Field support inquiries', 'Customer support representative to field support inquiries'),
-        'receptionist'            => array('&#128075;', 'Front Desk Receptionist', 'Greet, inform &amp; route', 'A general front desk receptionist to handle department transfers and inquiries'),
-        'lead_qualifier'          => array('&#127919;', 'Inbound Lead Qualifier', 'Qualify &amp; route leads', 'Qualifies inbound leads from web forms and ads, assesses budget and timeline, and routes to the right sales rep'),
-        'it_helpdesk'             => array('&#128736;', 'IT Help Desk / Internal Support', 'Internal IT support', 'Internal IT support &mdash; password resets, VPN, software troubleshooting'),
-        'technical_support'       => array('&#128295;', 'Technical Support Agent', 'Troubleshoot &amp; escalate', 'Troubleshoots product issues step-by-step and escalates with support tickets'),
-        'order_tracking'          => array('&#128230;', 'Order Status &amp; Tracking', 'Orders, tracking &amp; returns', 'Handles order inquiries, tracking, delivery estimates, and basic returns'),
-        'appointment_scheduler'   => array('&#128197;', 'Appointment Scheduler', 'Check availability &amp; book', 'Scheduling agent that checks availability, books appointments, and sends confirmations for any business type'),
-        'ecommerce_cx'            => array('&#128717;', 'Ecommerce Customer Experience', 'Shop &amp; support assistant', 'Ecommerce site shopping assistant that can handle support inquiries'),
-        'realestate_followup'     => array('&#127968;', 'Real Estate Lead Follow-Up', 'Qualify buyers &amp; book showings', 'Follows up with real estate leads, qualifies buyer interest and budget, and books property showings'),
-        'accounting_receptionist' => array('&#129534;', 'Accounting / Tax Firm Receptionist', 'CPA firm front desk', 'CPA firm calls &mdash; appointments, tax deadlines, document follow-ups'),
-        'after_hours'             => array('&#127769;', 'After-Hours Answering Service', 'After-hours messages &amp; triage', 'Handles calls outside business hours, takes messages, and routes emergencies'),
-        'blank'                   => array('&#10024;', 'Blank Agent', 'Start from scratch', 'Start from scratch &mdash; a clean agent with no preset persona. Best if you want to write your own instructions.'),
+        'customer_support'        => array(lumitalk_icon('headset'), 'Customer Support', 'Field support inquiries', 'Customer support representative to field support inquiries'),
+        'receptionist'            => array(lumitalk_icon('user'), 'Front Desk Receptionist', 'Greet, inform &amp; route', 'A general front desk receptionist to handle department transfers and inquiries'),
+        'lead_qualifier'          => array(lumitalk_icon('target'), 'Inbound Lead Qualifier', 'Qualify &amp; route leads', 'Qualifies inbound leads from web forms and ads, assesses budget and timeline, and routes to the right sales rep'),
+        'it_helpdesk'             => array(lumitalk_icon('cog'), 'IT Help Desk / Internal Support', 'Internal IT support', 'Internal IT support &mdash; password resets, VPN, software troubleshooting'),
+        'technical_support'       => array(lumitalk_icon('wrench'), 'Technical Support Agent', 'Troubleshoot &amp; escalate', 'Troubleshoots product issues step-by-step and escalates with support tickets'),
+        'order_tracking'          => array(lumitalk_icon('package'), 'Order Status &amp; Tracking', 'Orders, tracking &amp; returns', 'Handles order inquiries, tracking, delivery estimates, and basic returns'),
+        'appointment_scheduler'   => array(lumitalk_icon('calendar'), 'Appointment Scheduler', 'Check availability &amp; book', 'Scheduling agent that checks availability, books appointments, and sends confirmations for any business type'),
+        'ecommerce_cx'            => array(lumitalk_icon('bag'), 'Ecommerce Customer Experience', 'Shop &amp; support assistant', 'Ecommerce site shopping assistant that can handle support inquiries'),
+        'realestate_followup'     => array(lumitalk_icon('home'), 'Real Estate Lead Follow-Up', 'Qualify buyers &amp; book showings', 'Follows up with real estate leads, qualifies buyer interest and budget, and books property showings'),
+        'accounting_receptionist' => array(lumitalk_icon('receipt'), 'Accounting / Tax Firm Receptionist', 'CPA firm front desk', 'CPA firm calls &mdash; appointments, tax deadlines, document follow-ups'),
+        'after_hours'             => array(lumitalk_icon('moon'), 'After-Hours Answering Service', 'After-hours messages &amp; triage', 'Handles calls outside business hours, takes messages, and routes emergencies'),
+        'blank'                   => array(lumitalk_icon('sparkles'), 'Blank Agent', 'Start from scratch', 'Start from scratch &mdash; a clean agent with no preset persona. Best if you want to write your own instructions.'),
     );
 }
 
@@ -1047,10 +1128,10 @@ function lumitalk_render_preconnect($s, $notice_error, $notice_disc) {
             </div>
 
             <div class="lumi-grid">
-                <div class="lumi-tile"><strong>&#128172; AI Chat</strong><span>24/7 chat widget on your storefront</span></div>
-                <div class="lumi-tile"><strong>&#128222; AI Voice</strong><span>AI answers your phone line</span></div>
-                <div class="lumi-tile"><strong>&#128241; SMS</strong><span>Two-way SMS support</span></div>
-                <div class="lumi-tile"><strong>&#9993;&#65039; Email</strong><span>AI-assisted email replies</span></div>
+                <div class="lumi-tile"><strong><?php echo wp_kses(lumitalk_icon('chat'), lumitalk_svg_allowed()); ?> AI Chat</strong><span>24/7 chat widget on your storefront</span></div>
+                <div class="lumi-tile"><strong><?php echo wp_kses(lumitalk_icon('phone'), lumitalk_svg_allowed()); ?> AI Voice</strong><span>AI answers your phone line</span></div>
+                <div class="lumi-tile"><strong><?php echo wp_kses(lumitalk_icon('sms'), lumitalk_svg_allowed()); ?> SMS</strong><span>Two-way SMS support</span></div>
+                <div class="lumi-tile"><strong><?php echo wp_kses(lumitalk_icon('mail'), lumitalk_svg_allowed()); ?> Email</strong><span>AI-assisted email replies</span></div>
             </div>
 
             <div class="lumi-meta">
@@ -1103,10 +1184,10 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
     $enabled_keys = array();
     foreach (array('chat', 'voice', 'sms', 'email') as $c) { if (!empty($ch[$c]['enabled'])) { $enabled_keys[] = $c; } }
     $chmeta = array(
-        'voice' => array('&#128222;', 'Voice', 'Phone calls with AI agents'),
-        'chat'  => array('&#128172;', 'Chat', 'Live chat on your website'),
-        'sms'   => array('&#128241;', 'SMS', 'Text message support'),
-        'email' => array('&#9993;&#65039;', 'Email', 'Email support automation'),
+        'voice' => array(lumitalk_icon('phone'), 'Voice', 'Phone calls with AI agents'),
+        'chat'  => array(lumitalk_icon('chat'), 'Chat', 'Live chat on your website'),
+        'sms'   => array(lumitalk_icon('sms'), 'SMS', 'Text message support'),
+        'email' => array(lumitalk_icon('mail'), 'Email', 'Email support automation'),
     );
     ?>
     <div class="lumi-wiz">
@@ -1155,7 +1236,7 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                     $on = !empty($ch[$key]['enabled']) || ('chat' === $key && empty($ch)); ?>
                                     <label class="lumi-chc">
                                         <input type="checkbox" name="channels[]" value="<?php echo esc_attr($key); ?>" <?php checked($on); ?> />
-                                        <span class="lumi-chc-ico"><?php echo wp_kses_post($o[0]); ?></span>
+                                        <span class="lumi-chc-ico"><?php echo wp_kses($o[0], lumitalk_svg_allowed()); ?></span>
                                         <span class="lumi-chc-name"><?php echo esc_html($o[1]); ?></span>
                                         <span class="lumi-chc-desc"><?php echo esc_html($o[2]); ?></span>
                                     </label>
@@ -1225,7 +1306,7 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                             <span class="t">Channel<?php echo (count($channels_for_plans) > 1) ? 's' : ''; ?>:</span>
                             <?php foreach (array('voice', 'chat', 'sms', 'email') as $ck) :
                                 if (!in_array($ck, $channels_for_plans, true)) { continue; } ?>
-                                <span class="c"><?php echo wp_kses_post($chmeta[$ck][0]); ?> <?php echo esc_html($chmeta[$ck][1]); ?></span>
+                                <span class="c"><?php echo wp_kses($chmeta[$ck][0], lumitalk_svg_allowed()); ?> <?php echo esc_html($chmeta[$ck][1]); ?></span>
                             <?php endforeach; ?>
                         </div>
                         <?php if (empty($cards)) : ?>
@@ -1635,7 +1716,7 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                                         data-desc="<?php echo esc_attr(isset($rt['description']) ? $rt['description'] : wp_strip_all_tags($r[3])); ?>"
                                                         data-greeting="<?php echo esc_attr(isset($rt['first_message']) ? $rt['first_message'] : ''); ?>"
                                                         data-instructions="<?php echo esc_attr(isset($rt['system_prompt']) ? $rt['system_prompt'] : ''); ?>" />
-                                                    <span class="ico"><?php echo wp_kses_post($r[0]); ?></span>
+                                                    <span class="ico"><?php echo wp_kses($r[0], lumitalk_svg_allowed()); ?></span>
                                                     <span class="nm"><?php echo wp_kses_post($r[1]); ?></span>
                                                     <span class="tg"><?php echo wp_kses_post($r[2]); ?></span>
                                                     <span class="ds"><?php echo wp_kses_post($r[3]); ?></span>
@@ -1684,7 +1765,7 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                         <?php foreach (lumitalk_traits() as $tid => $tdef) : ?>
                                             <label class="lumi-tr">
                                                 <input type="checkbox" name="traits[]" value="<?php echo esc_attr($tid); ?>" <?php checked(in_array($tid, $tr, true)); ?> />
-                                                <span class="lumi-tr-ico"><?php echo wp_kses_post($tdef[0]); ?></span>
+                                                <span class="lumi-tr-ico"><?php echo wp_kses($tdef[0], lumitalk_svg_allowed()); ?></span>
                                                 <span class="lumi-tr-lb"><?php echo esc_html($tdef[1]); ?></span>
                                                 <span class="lumi-tr-ck">&#10003;</span>
                                             </label>
@@ -1823,9 +1904,9 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                                     <label class="lumi-voice" data-gender="<?php echo esc_attr(strtolower($v['gender'])); ?>">
                                                         <input type="radio" name="voice" value="<?php echo esc_attr($v['id']); ?>" <?php checked($voice_sel, $v['id']); ?> />
                                                         <?php if ($v['preview']) : ?>
-                                                            <button type="button" class="lumi-play" data-preview="<?php echo esc_url($v['preview']); ?>" aria-label="Play voice preview">&#9654;</button>
+                                                            <button type="button" class="lumi-play" data-preview="<?php echo esc_url($v['preview']); ?>" aria-label="Play voice preview"><?php echo wp_kses(lumitalk_icon('play'), lumitalk_svg_allowed()); ?></button>
                                                         <?php else : ?>
-                                                            <span class="lumi-play off">&#9654;</span>
+                                                            <span class="lumi-play off"><?php echo wp_kses(lumitalk_icon('play'), lumitalk_svg_allowed()); ?></span>
                                                         <?php endif; ?>
                                                         <span class="lumi-vname"><?php echo esc_html($v['name']); ?></span>
                                                         <span class="lumi-vtags">
@@ -1878,10 +1959,10 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                             <span class="lumi-flb">Chat Icon Style</span>
                                             <div class="lumi-icons">
                                                 <?php $cico = !empty($cw['iconStyle']) ? $cw['iconStyle'] : 'bubble';
-                                                foreach (array('bubble' => '&#128172;', 'chat' => '&#128489;', 'support' => '&#127911;', 'sparkle' => '&#10024;') as $ik => $iv) : ?>
+                                                foreach (array('bubble' => 'chat', 'chat' => 'sms', 'support' => 'headset', 'sparkle' => 'sparkles') as $ik => $iv) : ?>
                                                     <label class="lumi-icopt">
                                                         <input type="radio" name="chat_icon" value="<?php echo esc_attr($ik); ?>" <?php checked($cico, $ik); ?> />
-                                                        <span><?php echo wp_kses_post($iv); ?></span>
+                                                        <span><?php echo wp_kses(lumitalk_icon($iv), lumitalk_svg_allowed()); ?></span>
                                                     </label>
                                                 <?php endforeach; ?>
                                             </div>
@@ -2046,7 +2127,7 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
 
                             </div>
                             <aside class="lumi-two-side">
-                                <div class="lumi-sidelbl">&#128203; Sections</div>
+                                <div class="lumi-sidelbl">Sections</div>
                                 <?php foreach ($ai_secs as $sid => $sc) : ?>
                                     <button type="button" class="lumi-navi<?php echo ('global' === $sid) ? ' on' : ''; ?>" data-goto="<?php echo esc_attr($sid); ?>" data-navfor="<?php echo esc_attr($sid); ?>">
                                         <span><?php echo esc_html($sc[0]); ?></span>
@@ -2064,50 +2145,108 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                     <?php else : // review ?>
                         <input type="hidden" name="action" value="lumitalk_onb_launch" />
                         <?php
-                        $a = isset($state['assistant']) && is_array($state['assistant']) ? $state['assistant'] : array();
+                        $a    = isset($state['assistant']) && is_array($state['assistant']) ? $state['assistant'] : array();
+                        $cw   = isset($state['chatWidget']) && is_array($state['chatWidget']) ? $state['chatWidget'] : array();
+                        $bh   = isset($state['businessHours']) && is_array($state['businessHours']) ? $state['businessHours'] : array();
+                        $em   = isset($state['emailConnection']) && is_array($state['emailConnection']) ? $state['emailConnection'] : array();
+                        $av   = function ($k, $d = 'Not set') use ($a) { return (isset($a[$k]) && '' !== $a[$k]) ? $a[$k] : $d; };
                         $know = isset($state['knowledge']['productCount']) ? (int) $state['knowledge']['productCount'] : 0;
                         $app_name = !empty($state['applicationName']) ? $state['applicationName'] : get_bloginfo('name');
                         $platform_label = (lumitalk_detect_source() === 'woocommerce') ? 'WordPress/WooCommerce' : 'WordPress';
+
                         // Resolve the saved plan id -> tier + price for the Billing card.
                         $plan_tier_label = 'Free';
-                        $plan_total = '$0/month';
-                        $plan_freq = 'Monthly';
-                        $plan_matched = false;
+                        $plan_total      = 'Free';
+                        $plan_freq       = 'Monthly';
+                        $plan_total_lbl  = 'Total Monthly';
                         if (!empty($state['selectedPlan'])) {
-                            $rplans = lumitalk_fetch_plans(implode(',', $enabled_keys ? $enabled_keys : array('chat')));
+                            $rplans  = lumitalk_fetch_plans(implode(',', $enabled_keys ? $enabled_keys : array('chat')));
+                            $matched = false;
                             foreach ($rplans as $rp) {
                                 if (isset($rp['id']) && $rp['id'] === $state['selectedPlan']) {
-                                    $plan_matched = true;
-                                    $rtier = isset($rp['metadata']['tier']) ? strtolower($rp['metadata']['tier']) : '';
+                                    $matched = true;
+                                    $rtier   = isset($rp['metadata']['tier']) ? strtolower($rp['metadata']['tier']) : '';
                                     $plan_tier_label = ('' !== $rtier) ? ucfirst($rtier) : $rp['name'];
                                     $rpp = lumitalk_plan_price($rp);
-                                    if ('year' === $rpp['interval']) { $plan_freq = 'Annual (Save 10%)'; }
-                                    $plan_total = ('' !== $rpp['display'] ? $rpp['display'] : '$0')
-                                        . ($rpp['interval'] ? '/' . $rpp['interval'] : '/month');
+                                    if ('year' === $rpp['interval']) {
+                                        $plan_freq      = 'Annual (Save 10%)';
+                                        $plan_total_lbl = 'Total Yearly';
+                                    }
+                                    // A free tier reads "Free", not "Free/month".
+                                    $disp = ('' !== $rpp['display']) ? $rpp['display'] : '$0';
+                                    $plan_total = (0 === strcasecmp($disp, 'free'))
+                                        ? 'Free'
+                                        : $disp . ($rpp['interval'] ? '/' . $rpp['interval'] : '/month');
                                     break;
                                 }
                             }
-                            if (!$plan_matched) {
-                                // Unresolvable id (e.g. catalogue changed): show it raw
-                                // instead of misreporting the plan as Free.
-                                $plan_tier_label = $state['selectedPlan'];
-                                $plan_total = '—';
-                            }
+                            if (!$matched) { $plan_tier_label = $state['selectedPlan']; $plan_total = '&mdash;'; }
                         }
+
                         $traits_map = lumitalk_traits();
                         $sel_traits = (isset($state['personalityTraits']) && is_array($state['personalityTraits'])) ? $state['personalityTraits'] : array();
-                        $step_url = function ($k) {
+                        $step_url   = function ($k) {
                             return add_query_arg(array('page' => 'lumitalk-ai', 'step' => $k), admin_url('admin.php'));
+                        };
+
+                        // Agent role + languages
+                        $rv_roles = lumitalk_agent_roles();
+                        $rv_rid   = !empty($state['agentRole']) ? $state['agentRole'] : (!empty($state['agent_role']) ? $state['agent_role'] : $av('agent_role', ''));
+                        $rv_rname = isset($rv_roles[$rv_rid]) ? $rv_roles[$rv_rid][1] : 'Not set';
+                        $rv_lcat  = lumitalk_languages();
+                        $rv_ls    = (isset($a['languages']) && is_array($a['languages']) && $a['languages']) ? $a['languages'] : array('en-US');
+
+                        // Phone numbers + selected voice name
+                        $rv_phone = $av('phone_number', '');
+                        $rv_nums  = lumitalk_fetch_phone_numbers();
+                        $rv_pmap  = array();
+                        foreach ($rv_nums as $rn) { $rv_pmap[ $rn['number'] ] = $rn; }
+                        if ('' !== $rv_phone && !isset($rv_pmap[ $rv_phone ])) {
+                            $rv_pmap[ $rv_phone ] = array('number' => $rv_phone, 'friendly' => '', 'caps' => array('voice', 'sms'));
+                        }
+                        $rv_vname = 'Not set';
+                        if ('' !== $av('voice', '')) {
+                            foreach (lumitalk_fetch_voices() as $vv) {
+                                if ($vv['id'] === $a['voice']) { $rv_vname = $vv['name']; break; }
+                            }
+                            if ('Not set' === $rv_vname) { $rv_vname = $a['voice']; }
+                        }
+
+                        // Business hours summary
+                        $rv_open = array();
+                        foreach (array('monday' => 'Mon', 'tuesday' => 'Tue', 'wednesday' => 'Wed', 'thursday' => 'Thu', 'friday' => 'Fri', 'saturday' => 'Sat', 'sunday' => 'Sun') as $rk => $rl) {
+                            if (!empty($bh[ $rk ]['enabled'])) { $rv_open[] = $rl; }
+                        }
+                        $rv_hours = $rv_open
+                            ? implode(', ', $rv_open) . (!empty($bh['timezone']) ? ' (' . $bh['timezone'] . ')' : '')
+                            : 'Not set';
+                        $rv_support = trim($av('support_phone', '') . ' ' . $av('support_email', ''));
+
+                        // Per-channel persona used by the AI Personality tabs.
+                        $rv_persona = function ($key) use ($a, $av) {
+                            $custom = ('' !== $key) && !empty($a[ $key . '_custom_personality' ]);
+                            $pick   = function ($f, $dflt) use ($a, $key, $custom) {
+                                $ck = $key . '_' . $f;
+                                if ($custom && isset($a[ $ck ]) && '' !== $a[ $ck ]) { return $a[ $ck ]; }
+                                return $dflt;
+                            };
+                            return array(
+                                'name'     => $pick('name', $av('name')),
+                                'greeting' => $pick('greeting', $av('greeting')),
+                                'type'     => $custom ? 'Custom' : 'Base personality',
+                            );
                         };
                         ?>
                         <div class="lumi-rvhero">
                             <h2>You are all set !</h2>
                             <p>Your AI-powered customer service platform is configured and ready to go. Review your setup below and activate when ready.</p>
                         </div>
+
                         <div class="lumi-rvgrid">
+
                             <div class="lumi-rvc">
                                 <div class="lumi-rvc-h">
-                                    <div class="tt"><span class="ic">&#129513;</span><h4>Application Overview</h4></div>
+                                    <div class="tt"><span class="ic"><?php echo wp_kses(lumitalk_icon('overview'), lumitalk_svg_allowed()); ?></span><h4>Application Overview</h4></div>
                                     <a class="edit" href="<?php echo esc_url($step_url('channels')); ?>">Edit +</a>
                                 </div>
                                 <div class="lumi-rvrow">
@@ -2118,9 +2257,10 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                     <div>
                                         <h5>Channels :</h5>
                                         <div class="lumi-pills">
-                                            <?php foreach ($enabled_keys ? $enabled_keys : array('chat') as $ck) : ?>
-                                                <span class="lumi-pill2"><?php echo esc_html('sms' === $ck ? 'SMS' : ucfirst($ck)); ?></span>
+                                            <?php foreach ($enabled_keys as $ck) : ?>
+                                                <span class="lumi-pill2"><?php echo wp_kses($chmeta[$ck][0], lumitalk_svg_allowed()); ?> <?php echo esc_html($chmeta[$ck][1]); ?></span>
                                             <?php endforeach; ?>
+                                            <?php if (!$enabled_keys) : ?><span class="val">None selected</span><?php endif; ?>
                                         </div>
                                     </div>
                                 </div>
@@ -2129,9 +2269,10 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                     <div class="val"><?php echo esc_html($platform_label); ?></div>
                                 </div>
                             </div>
+
                             <div class="lumi-rvc">
                                 <div class="lumi-rvc-h">
-                                    <div class="tt"><span class="ic">&#128179;</span><h4>Billing &amp; Plan</h4></div>
+                                    <div class="tt"><span class="ic"><?php echo wp_kses(lumitalk_icon('billing'), lumitalk_svg_allowed()); ?></span><h4>Billing &amp; Plan</h4></div>
                                     <a class="edit" href="<?php echo esc_url($step_url('plan')); ?>">Edit +</a>
                                 </div>
                                 <div class="lumi-rvrow">
@@ -2145,95 +2286,181 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                     </div>
                                 </div>
                                 <div class="lumi-rvblock">
-                                    <h5>Total Monthly :</h5>
-                                    <div class="val"><?php echo esc_html($plan_total); ?></div>
+                                    <h5><?php echo esc_html($plan_total_lbl); ?> :</h5>
+                                    <div class="val big"><?php echo wp_kses_post($plan_total); ?></div>
                                 </div>
                             </div>
+
                             <div class="lumi-rvc">
                                 <div class="lumi-rvc-h">
-                                    <div class="tt"><span class="ic">&#127968;</span><h4>Store Connection</h4></div>
+                                    <div class="tt"><span class="ic"><?php echo wp_kses(lumitalk_icon('store'), lumitalk_svg_allowed()); ?></span><h4>Website Connection</h4></div>
                                     <a class="edit" href="<?php echo esc_url($step_url('store')); ?>">Edit +</a>
                                 </div>
                                 <div class="lumi-rvrow">
                                     <div>
-                                        <h5>Store URL :</h5>
-                                        <div class="val brk"><?php echo esc_html(!empty($s['store_url']) ? $s['store_url'] : lumitalk_store_url()); ?></div>
+                                        <h5>Connection Status :</h5>
+                                        <div class="val"><span class="lumi-st <?php echo !empty($s['connected']) ? 'ok' : 'no'; ?>"><?php echo !empty($s['connected']) ? 'Connected' : 'Not Connected'; ?></span></div>
                                     </div>
                                     <div>
                                         <h5>Products Synced :</h5>
                                         <div class="val"><?php echo esc_html((string) $know); ?></div>
                                     </div>
                                 </div>
-                                <?php
-                                $rv_bh   = isset($state['businessHours']) && is_array($state['businessHours']) ? $state['businessHours'] : array();
-                                $rv_open = array();
-                                foreach (array('monday' => 'Mon', 'tuesday' => 'Tue', 'wednesday' => 'Wed', 'thursday' => 'Thu', 'friday' => 'Fri', 'saturday' => 'Sat', 'sunday' => 'Sun') as $rk => $rl) {
-                                    if (!empty($rv_bh[ $rk ]['enabled'])) { $rv_open[] = $rl; }
-                                }
-                                $rv_hrs = $rv_open
-                                    ? implode(', ', $rv_open) . (isset($rv_bh['timezone']) ? ' (' . $rv_bh['timezone'] . ')' : '')
-                                    : 'Not set';
-                                ?>
+                                <div class="lumi-rvblock">
+                                    <h5>Website URL :</h5>
+                                    <div class="val brk"><?php echo esc_html(!empty($s['store_url']) ? $s['store_url'] : lumitalk_store_url()); ?></div>
+                                </div>
                                 <div class="lumi-rvrow">
                                     <div>
                                         <h5>Support Contact :</h5>
-                                        <div class="val brk"><?php echo esc_html(trim((isset($a['support_phone']) ? $a['support_phone'] : '') . ' ' . (isset($a['support_email']) ? $a['support_email'] : ''))); ?></div>
+                                        <div class="val brk"><?php echo esc_html('' !== $rv_support ? $rv_support : 'Not set'); ?></div>
                                     </div>
                                     <div>
                                         <h5>Business Hours :</h5>
-                                        <div class="val"><?php echo esc_html($rv_hrs); ?></div>
+                                        <div class="val"><?php echo esc_html($rv_hours); ?></div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="lumi-rvc">
+
+                            <div class="lumi-rvc wide">
                                 <div class="lumi-rvc-h">
-                                    <div class="tt"><span class="ic">&#10024;</span><h4>AI Personality</h4></div>
+                                    <div class="tt"><span class="ic"><?php echo wp_kses(lumitalk_icon('sparkles'), lumitalk_svg_allowed()); ?></span><h4>AI Personality</h4></div>
                                     <a class="edit" href="<?php echo esc_url($step_url('assistant')); ?>">Edit +</a>
                                 </div>
-                                <div class="lumi-rvrow">
-                                    <div>
-                                        <h5>Agent Name :</h5>
-                                        <div class="val"><?php echo esc_html(!empty($a['name']) ? $a['name'] : 'Not set'); ?></div>
+                                <?php
+                                $ptabs = array('base' => 'Base Personality');
+                                foreach ($enabled_keys as $ck) { $ptabs[ $ck ] = $chmeta[ $ck ][1]; }
+                                ?>
+                                <div class="lumi-tabs">
+                                    <?php $first = true; foreach ($ptabs as $pk => $pl) : ?>
+                                        <button type="button" class="lumi-tab<?php echo $first ? ' on' : ''; ?>" data-tab="p-<?php echo esc_attr($pk); ?>"><?php echo esc_html($pl); ?></button>
+                                    <?php $first = false; endforeach; ?>
+                                </div>
+                                <?php $first = true; foreach ($ptabs as $pk => $pl) :
+                                    $pv = $rv_persona('base' === $pk ? '' : $pk); ?>
+                                    <div data-tabp="p-<?php echo esc_attr($pk); ?>" <?php echo $first ? '' : 'hidden'; ?>>
+                                        <div class="lumi-rvrow">
+                                            <div>
+                                                <h5>Agent Name :</h5>
+                                                <div class="val"><?php echo esc_html($pv['name']); ?></div>
+                                            </div>
+                                            <div>
+                                                <h5>Personality Type :</h5>
+                                                <div class="val"><?php echo esc_html($pv['type']); ?></div>
+                                            </div>
+                                        </div>
+                                        <div class="lumi-rvblock">
+                                            <h5>Greeting Message :</h5>
+                                            <div class="val quote">&ldquo;<?php echo esc_html($pv['greeting']); ?>&rdquo;</div>
+                                        </div>
                                     </div>
+                                <?php $first = false; endforeach; ?>
+                                <div class="lumi-rvrow">
                                     <div>
                                         <h5>Agent Role :</h5>
-                                        <?php
-                                        $rv_roles = lumitalk_agent_roles();
-                                        $rv_rid   = !empty($state['agent_role']) ? $state['agent_role'] : (!empty($a['agent_role']) ? $a['agent_role'] : '');
-                                        $rv_rname = isset($rv_roles[$rv_rid]) ? $rv_roles[$rv_rid][1] : 'Not set';
-                                        ?>
-                                        <div class="val"><?php echo wp_kses_post($rv_rname); ?></div>
-                                    </div>
-                                </div>
-                                <div class="lumi-rvrow">
-                                    <div>
-                                        <h5>Languages :</h5>
-                                        <?php
-                                        $rv_lcat = lumitalk_languages();
-                                        $rv_ls   = (isset($a['languages']) && is_array($a['languages']) && $a['languages']) ? $a['languages'] : array('en-US');
-                                        $rv_lnames = array();
-                                        foreach ($rv_ls as $rv_lc) {
-                                            if (isset($rv_lcat[$rv_lc])) { $rv_lnames[] = $rv_lcat[$rv_lc][1]; }
-                                        }
-                                        ?>
-                                        <div class="val"><?php echo esc_html($rv_lnames ? implode(', ', $rv_lnames) : 'English (United States)'); ?></div>
+                                        <div class="val"><?php echo esc_html($rv_rname); ?></div>
                                     </div>
                                     <div>
                                         <h5>Traits :</h5>
                                         <div class="lumi-pills">
                                             <?php foreach ($sel_traits as $tid) :
                                                 $tl = isset($traits_map[$tid]) ? $traits_map[$tid] : array('', ucfirst($tid)); ?>
-                                                <span class="lumi-pill2"><?php echo wp_kses_post($tl[0]); ?> <?php echo esc_html($tl[1]); ?></span>
+                                                <span class="lumi-pill2"><?php echo wp_kses($tl[0], lumitalk_svg_allowed()); ?> <?php echo esc_html($tl[1]); ?></span>
                                             <?php endforeach; ?>
                                             <?php if (empty($sel_traits)) : ?><span class="val">None selected</span><?php endif; ?>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="lumi-rvblock">
-                                    <h5>Greeting :</h5>
-                                    <div class="val"><?php echo esc_html(!empty($a['greeting']) ? $a['greeting'] : 'Not set'); ?></div>
+                            </div>
+
+                            <div class="lumi-rvc">
+                                <div class="lumi-rvc-h">
+                                    <div class="tt"><span class="ic"><?php echo wp_kses(lumitalk_icon('globe'), lumitalk_svg_allowed()); ?></span><h4>Language</h4></div>
+                                    <a class="edit" href="<?php echo esc_url($step_url('assistant')); ?>">Edit +</a>
+                                </div>
+                                <?php foreach ($rv_ls as $rvi => $rv_lc) :
+                                    if (!isset($rv_lcat[$rv_lc])) { continue; } ?>
+                                    <div class="lumi-rvsub">
+                                        <div class="lumi-rvsub-h">
+                                            <b><?php echo wp_kses_post($rv_lcat[$rv_lc][0]); ?> <?php echo esc_html($rv_lc); ?></b>
+                                            <span class="lumi-badge2"><?php echo (0 === $rvi) ? 'Included' : 'Additional'; ?></span>
+                                            <?php if (0 === $rvi) : ?><span class="lumi-badge pri">Primary</span><?php endif; ?>
+                                        </div>
+                                        <div class="lumi-kv">
+                                            <span>Language</span><b><?php echo esc_html($rv_lcat[$rv_lc][1]); ?></b>
+                                            <span>Voice</span><b><?php echo esc_html((0 === $rvi) ? $rv_vname : 'Not set'); ?></b>
+                                            <span>Cost</span><b><?php echo (0 === $rvi) ? 'Free' : '$' . esc_html((string) lumitalk_language_price()) . '/mo'; ?></b>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+
+                            <?php if (in_array('voice', $enabled_keys, true) || $rv_pmap) : ?>
+                                <div class="lumi-rvc">
+                                    <div class="lumi-rvc-h">
+                                        <div class="tt"><span class="ic"><?php echo wp_kses(lumitalk_icon('phone'), lumitalk_svg_allowed()); ?></span><h4>Phone Numbers</h4></div>
+                                        <a class="edit" href="<?php echo esc_url($step_url('assistant')); ?>">Edit +</a>
+                                    </div>
+                                    <?php if ($rv_pmap) : $pi = 0; foreach ($rv_pmap as $pnum => $pn) : ?>
+                                        <div class="lumi-rvsub">
+                                            <div class="lumi-rvsub-h">
+                                                <b><?php echo esc_html($pnum); ?></b>
+                                                <span class="lumi-badge2">Free</span>
+                                                <?php if (0 === $pi) : ?><span class="lumi-badge pri">Primary</span><?php endif; ?>
+                                            </div>
+                                            <div class="lumi-kv">
+                                                <span>Capabilities</span>
+                                                <b><?php echo esc_html($pn['caps'] ? implode(', ', $pn['caps']) : 'voice'); ?></b>
+                                                <span>Type</span><b>Standard</b>
+                                            </div>
+                                        </div>
+                                    <?php $pi++; endforeach; ?>
+                                        <div class="lumi-rvtotal">Total Monthly Phone Cost: <b>$0.00</b></div>
+                                    <?php else : ?>
+                                        <div class="val">No number provisioned yet &mdash; you can add one in LumiTalk after activating.</div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <div class="lumi-rvc wide">
+                                <div class="lumi-rvc-h">
+                                    <div class="tt"><span class="ic"><?php echo wp_kses(lumitalk_icon('stack'), lumitalk_svg_allowed()); ?></span><h4>Channel Configuration</h4></div>
+                                    <a class="edit" href="<?php echo esc_url($step_url('assistant')); ?>">Edit +</a>
+                                </div>
+                                <div class="lumi-chgrid">
+                                    <?php foreach ($enabled_keys as $ck) :
+                                        $cp = $rv_persona($ck); ?>
+                                        <div class="lumi-chcard">
+                                            <h5><?php echo wp_kses($chmeta[$ck][0], lumitalk_svg_allowed()); ?> <?php echo esc_html($chmeta[$ck][1]); ?></h5>
+                                            <div class="lumi-kv">
+                                                <?php if ('voice' === $ck) : ?>
+                                                    <span>Phone</span><b><?php echo esc_html('' !== $rv_phone ? $rv_phone : 'Not set'); ?></b>
+                                                    <span>Voice</span><b><?php echo esc_html($rv_vname); ?></b>
+                                                    <span>Speed</span><b><?php echo esc_html(ucfirst($av('voice_speed', 'normal'))); ?></b>
+                                                    <span>Languages</span><b><?php echo esc_html((string) count($rv_ls)); ?> configured</b>
+                                                <?php elseif ('chat' === $ck) : ?>
+                                                    <span>Theme</span><b><?php echo esc_html(ucfirst(!empty($cw['theme']) ? $cw['theme'] : 'auto')); ?></b>
+                                                    <span>Position</span><b><?php echo esc_html(str_replace('-', ' ', !empty($cw['position']) ? $cw['position'] : 'bottom-right')); ?></b>
+                                                    <span>Auto-open</span><b><?php echo !empty($cw['autoOpen']) ? 'Yes' : 'No'; ?></b>
+                                                    <span>Widget</span><b><?php echo !empty($s['widget_key']) ? 'Key issued' : 'Pending'; ?></b>
+                                                <?php elseif ('sms' === $ck) : ?>
+                                                    <span>Phone</span><b><?php echo esc_html('' !== $rv_phone ? $rv_phone : 'Not set'); ?></b>
+                                                    <span>Compliance</span><b>Opt-out enabled</b>
+                                                    <span>10DLC</span><b>Not registered</b>
+                                                <?php else : ?>
+                                                    <span>Provider</span><b><?php echo esc_html(!empty($em['provider']) ? $em['provider'] : 'Not connected'); ?></b>
+                                                    <span>Address</span><b class="brk"><?php echo esc_html(!empty($em['address']) ? $em['address'] : 'Not set'); ?></b>
+                                                    <span>From name</span><b><?php echo esc_html($av('email_from', get_bloginfo('name'))); ?></b>
+                                                <?php endif; ?>
+                                                <span>Personality</span><b><?php echo esc_html($cp['type']); ?></b>
+                                            </div>
+                                            <div class="lumi-chgreet">&ldquo;<?php echo esc_html($cp['greeting']); ?>&rdquo;</div>
+                                            <a class="lumi-lnk" href="<?php echo esc_url($step_url('assistant')); ?>">Configure <?php echo esc_html($chmeta[$ck][1]); ?></a>
+                                        </div>
+                                    <?php endforeach; ?>
                                 </div>
                             </div>
+
                         </div>
                     <?php endif; ?>
 
@@ -2675,6 +2902,16 @@ function lumitalk_admin_css() {
     .lumi-lang{display:inline-flex;align-items:center;gap:6px;border:1px solid #d1d5db;border-radius:999px;padding:7px 13px;font-size:12.5px;color:#374151;cursor:pointer;background:#fff;}
     .lumi-lang:has(input:checked){border-color:#ec4899;background:#fdf2f8;color:#be185d;font-weight:600;}
     .lumi-lang input{accent-color:#ec4899;}
+    /* ---- Inline icons (Heroicons 24/outline, inherit colour + size) ---- */
+    .lumi-ic{width:1.25em;height:1.25em;display:inline-block;vertical-align:-.22em;flex-shrink:0;}
+    .lumi-arole .ico .lumi-ic{width:26px;height:26px;color:#db2777;vertical-align:middle;}
+    .lumi-tr-ico .lumi-ic,.lumi-pill2 .lumi-ic{width:15px;height:15px;vertical-align:-.2em;}
+    .lumi-chc-ico .lumi-ic{width:26px;height:26px;color:#db2777;}
+    .lumi-icopt .lumi-ic{width:22px;height:22px;color:#374151;}
+    .lumi-icopt:has(input:checked) .lumi-ic{color:#db2777;}
+    .lumi-play .lumi-ic{width:11px;height:11px;vertical-align:-.05em;}
+    .lumi-tile strong .lumi-ic{width:17px;height:17px;color:#db2777;}
+    .lumi-rvc-h .ic .lumi-ic{width:20px;height:20px;color:#db2777;}
     /* ---- Agent picker ---- */
     .lumi-apk-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px;}
     .lumi-apk-h h5{margin:0;font-size:15px;font-weight:700;color:#111827;}
@@ -2781,6 +3018,27 @@ function lumitalk_admin_css() {
     .lumi-tabs{display:flex;gap:4px;border-bottom:1px solid #e5e7eb;margin:18px 0 16px;}
     .lumi-tab{background:none;border:0;border-bottom:2px solid transparent;padding:8px 14px;font-size:12.5px;font-weight:600;color:#6b7280;cursor:pointer;font-family:inherit;}
     .lumi-tab.on{color:#be185d;border-bottom-color:#ec4899;}
+    /* ---- Review cards ---- */
+    .lumi-rvc.wide{grid-column:1/-1;}
+    .lumi-val,.lumi-rvc .val.big{font-size:20px;font-weight:800;color:#db2777;}
+    .lumi-rvc .val.quote{font-style:italic;color:#374151;}
+    .lumi-st{display:inline-block;border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:700;}
+    .lumi-st.ok{background:#dcfce7;color:#166534;}
+    .lumi-st.no{background:#fee2e2;color:#991b1b;}
+    .lumi-rvsub{border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:10px;}
+    .lumi-rvsub-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+    .lumi-rvsub-h b{font-size:14px;color:#111827;}
+    .lumi-badge2{background:#f3f4f6;color:#6b7280;border-radius:999px;padding:2px 9px;font-size:10px;font-weight:700;}
+    .lumi-kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12px;align-items:baseline;}
+    .lumi-kv span{color:#9ca3af;}
+    .lumi-kv b{color:#111827;font-weight:600;text-align:right;word-break:break-word;}
+    .lumi-rvtotal{margin-top:6px;padding-top:10px;border-top:1px solid #f3f4f6;font-size:12.5px;color:#6b7280;}
+    .lumi-rvtotal b{color:#db2777;font-size:14px;}
+    .lumi-chgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;}
+    .lumi-chcard{border:1px solid #e5e7eb;border-radius:10px;padding:14px;}
+    .lumi-chcard h5{margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid #f3f4f6;font-size:13px;font-weight:700;color:#111827;display:flex;align-items:center;gap:7px;}
+    .lumi-chcard h5 .lumi-ic{width:17px;height:17px;color:#db2777;}
+    .lumi-chgreet{margin:10px 0;font-size:11.5px;font-style:italic;color:#6b7280;line-height:1.5;}
     /* ---- Sidebar status ---- */
     .lumi-cfgstat{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding:10px 12px;border-top:1px solid #f3f4f6;font-size:11.5px;color:#9ca3af;}
     .lumi-cfgstat b{color:#16a34a;font-size:12px;}
@@ -3189,19 +3447,20 @@ function lumitalk_admin_js() {
                 r.addEventListener("change", function(){ dot("phone", true); });
             });
 
-            /* ---- Sub-tabs inside a section (SMS messages/behavior/keywords) ---- */
-            Array.prototype.forEach.call(wrap.querySelectorAll(".lumi-tab"), function(b){
-                b.addEventListener("click", function(){
-                    var bar = b.parentNode, sect = bar.parentNode;
-                    Array.prototype.forEach.call(bar.querySelectorAll(".lumi-tab"), function(x){ x.classList.toggle("on", x === b); });
-                    Array.prototype.forEach.call(sect.querySelectorAll("[data-tabp]"), function(p){
-                        p.hidden = (p.getAttribute("data-tabp") !== b.getAttribute("data-tab"));
-                    });
-                });
-            });
-
             syncReq();
             cfgStatus();
+        });
+
+        /* ---- Sub-tabs (SMS message groups, review personality tabs). Bound at
+           document level because the review step has no two-column wrapper. ---- */
+        Array.prototype.forEach.call(document.querySelectorAll(".lumi-tab"), function(b){
+            b.addEventListener("click", function(){
+                var bar = b.parentNode, sect = bar.parentNode;
+                Array.prototype.forEach.call(bar.querySelectorAll(".lumi-tab"), function(x){ x.classList.toggle("on", x === b); });
+                Array.prototype.forEach.call(sect.querySelectorAll("[data-tabp]"), function(p){
+                    p.hidden = (p.getAttribute("data-tabp") !== b.getAttribute("data-tab"));
+                });
+            });
         });
     })();';
 }
