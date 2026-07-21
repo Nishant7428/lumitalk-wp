@@ -418,6 +418,58 @@ function lumitalk_fetch_templates() {
 }
 
 /**
+ * GET the LumiTalk API authenticated as this site. The API auth gate accepts the
+ * marketplace embed JWT as a Bearer credential, so no extra key is needed.
+ *
+ * @param string $path Path beginning with /api/.
+ * @param array  $args Optional query arguments.
+ * @return array|null Decoded body, or null on any failure.
+ */
+function lumitalk_api_get_auth($path, $args = array()) {
+    $s = lumitalk_get_settings();
+    if (empty($s['embed_token'])) { return null; }
+    $url = lumitalk_api_url() . $path;
+    if ($args) { $url = add_query_arg($args, $url); }
+    $r = wp_remote_get($url, array(
+        'timeout' => 20,
+        'headers' => array('Authorization' => 'Bearer ' . $s['embed_token']),
+    ));
+    if (is_wp_error($r) || 200 !== (int) wp_remote_retrieve_response_code($r)) { return null; }
+    $body = json_decode(wp_remote_retrieve_body($r), true);
+    return is_array($body) ? $body : null;
+}
+
+/**
+ * Phone numbers already provisioned on this account.
+ *
+ * @return array list of array('number','friendly','caps')
+ */
+function lumitalk_fetch_phone_numbers() {
+    $cached = get_transient('lumitalk_phone_numbers');
+    if (is_array($cached)) { return $cached; }
+
+    $out = array();
+    $d   = lumitalk_api_get_auth('/api/twilionumber');
+    if (is_array($d)) {
+        foreach ($d as $n) {
+            if (!is_array($n)) { continue; }
+            $num = '';
+            foreach (array('number', 'phoneNumber', 'phone_number') as $nk) {
+                if (!empty($n[ $nk ])) { $num = $n[ $nk ]; break; }
+            }
+            if ('' === $num) { continue; }
+            $out[] = array(
+                'number'   => $num,
+                'friendly' => !empty($n['friendlyName']) ? $n['friendlyName'] : (!empty($n['friendly_name']) ? $n['friendly_name'] : ''),
+                'caps'     => (isset($n['capabilities']) && is_array($n['capabilities'])) ? $n['capabilities'] : array(),
+            );
+        }
+    }
+    set_transient('lumitalk_phone_numbers', $out, 5 * MINUTE_IN_SECONDS);
+    return $out;
+}
+
+/**
  * The voice library available to this application. Cached for one hour.
  *
  * @return array list of array('id','name','gender','accent','use_case','preview')
@@ -529,6 +581,7 @@ add_action('admin_enqueue_scripts', function ($hook) {
     wp_localize_script('lumitalk-admin', 'lumitalkAdmin', array(
         'ajaxUrl'    => admin_url('admin-ajax.php'),
         'agentNonce' => wp_create_nonce('lumitalk_agent_sso'),
+        'phoneNonce' => wp_create_nonce('lumitalk_phone_search'),
     ));
     wp_add_inline_script('lumitalk-admin', lumitalk_admin_js());
 });
@@ -870,6 +923,41 @@ add_action('admin_post_lumitalk_onb_launch', function () {
     $s['onboarded'] = true;
     lumitalk_save_settings($s);
     lumitalk_redirect_with('lumitalk_launched', '1');
+});
+
+// AJAX: search numbers available to provision, so the picker can list them without
+// a page reload (same endpoint the LumiTalk app's phone picker uses).
+add_action('wp_ajax_lumitalk_phone_search', function () {
+    if (!current_user_can('manage_options')) { wp_send_json_error('unauthorized', 403); }
+    check_ajax_referer('lumitalk_phone_search');
+
+    $area = isset($_POST['area']) ? sanitize_text_field(wp_unslash($_POST['area'])) : '';
+    $args = array('country' => 'US');
+    if ('' !== $area) {
+        // Three digits is an area code; anything else is treated as a state.
+        if (preg_match('/^[0-9]{3}$/', $area)) { $args['areaCode'] = $area; }
+        else { $args['state'] = strtoupper($area); }
+    }
+
+    $d = lumitalk_api_get_auth('/api/twilionumber/search', $args);
+    if (!is_array($d)) { wp_send_json_error('Could not search numbers right now. You can also pick one in LumiTalk after setup.'); }
+
+    $out = array();
+    foreach ($d as $n) {
+        if (!is_array($n)) { continue; }
+        $num = '';
+        foreach (array('phoneNumber', 'number', 'phone_number') as $nk) {
+            if (!empty($n[ $nk ])) { $num = $n[ $nk ]; break; }
+        }
+        if ('' === $num) { continue; }
+        $out[] = array(
+            'number'   => $num,
+            'friendly' => !empty($n['friendlyName']) ? $n['friendlyName'] : $num,
+            'locality' => !empty($n['locality']) ? $n['locality'] : '',
+            'caps'     => (isset($n['capabilities']) && is_array($n['capabilities'])) ? array_values($n['capabilities']) : array(),
+        );
+    }
+    wp_send_json_success($out);
 });
 
 // AJAX: mint a fresh single-use SSO ticket and return the agent-panel URL.
@@ -1661,27 +1749,62 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
 
                                 <?php if (in_array('voice', $enabled_keys, true)) : ?>
                                     <section class="lumi-sp" data-sec="phone" hidden>
-                                        <h4 class="lumi-sph">Phone Number</h4>
+                                        <?php
+                                        // Numbers already on the account. If the saved number isn't among
+                                        // them, still show it — it is what the assistant will answer on.
+                                        $acct_nums = lumitalk_fetch_phone_numbers();
+                                        $conf_nums = array();
+                                        foreach ($acct_nums as $an) { $conf_nums[ $an['number'] ] = $an; }
+                                        if ('' !== $phone_num && !isset($conf_nums[ $phone_num ])) {
+                                            $conf_nums[ $phone_num ] = array('number' => $phone_num, 'friendly' => '', 'caps' => array('voice', 'sms'));
+                                        }
+                                        if ('' === $phone_num && $acct_nums) { $phone_num = $acct_nums[0]['number']; }
+                                        $n_count = count($conf_nums);
+                                        ?>
+                                        <h4 class="lumi-sph"><?php echo $n_count ? 'Phone Numbers Confirmed' : 'Phone Numbers'; ?></h4>
                                         <p class="lumi-spsub">The number customers call to reach your voice assistant.</p>
-                                        <?php if ('' !== $phone_num) : ?>
+
+                                        <?php if ($n_count) : ?>
                                             <div class="lumi-phonecard">
                                                 <div class="lumi-phonehead">
-                                                    <b>&#10003; Phone Number Confirmed</b>
-                                                    <span class="lumi-badge pri">1 Number</span>
+                                                    <b>&#10003; Phone Number<?php echo (1 === $n_count) ? '' : 's'; ?> Confirmed</b>
+                                                    <span class="lumi-badge pri"><?php echo esc_html((string) $n_count); ?> Number<?php echo (1 === $n_count) ? '' : 's'; ?></span>
                                                 </div>
-                                                <div class="lumi-phonenum"><?php echo esc_html($phone_num); ?></div>
-                                                <div class="lumi-phonetags">
-                                                    <span class="lumi-tag">Voice</span>
-                                                    <?php if (in_array('sms', $enabled_keys, true)) : ?><span class="lumi-tag">SMS</span><?php endif; ?>
-                                                </div>
+                                                <?php foreach ($conf_nums as $cn) : ?>
+                                                    <label class="lumi-pnum">
+                                                        <input type="radio" name="phone_number" value="<?php echo esc_attr($cn['number']); ?>" <?php checked($phone_num, $cn['number']); ?> />
+                                                        <span class="lumi-phonenum"><?php echo esc_html($cn['number']); ?></span>
+                                                        <span class="lumi-phonetags">
+                                                            <?php
+                                                            $caps = $cn['caps'] ? $cn['caps'] : array('voice');
+                                                            foreach ($caps as $cap) : ?>
+                                                                <span class="lumi-tag"><?php echo esc_html(strtoupper($cap) === 'SMS' || strtoupper($cap) === 'MMS' ? strtoupper($cap) : ucfirst($cap)); ?></span>
+                                                            <?php endforeach; ?>
+                                                        </span>
+                                                        <span class="lumi-vck">&#10003;</span>
+                                                    </label>
+                                                <?php endforeach; ?>
                                                 <div class="lumi-connrow"><span>Monthly Cost:</span><b>$0/month</b></div>
                                                 <p class="lumi-fhint">&#10003; First number included FREE</p>
                                             </div>
+                                        <?php else : ?>
+                                            <div class="lumi-notice">
+                                                <b>No number provisioned yet</b>
+                                                <p>Search below to reserve one, or skip this and provision a number in LumiTalk after setup &mdash; your other channels work either way.</p>
+                                            </div>
                                         <?php endif; ?>
-                                        <div class="lumi-fg">
-                                            <label class="lumi-flb" for="lumi-phone">Phone number for voice calls</label>
-                                            <input class="lumi-fin" id="lumi-phone" type="text" name="phone_number" value="<?php echo esc_attr($phone_num); ?>" placeholder="+1 555 123 4567" />
-                                            <p class="lumi-fhint">Leave blank to provision a number in LumiTalk after setup. Additional numbers can be added there too.</p>
+
+                                        <button type="button" class="lumi-b3 sm" data-pnexpand>
+                                            <?php echo $n_count ? 'Select Additional Numbers' : 'Find a Number'; ?>
+                                        </button>
+
+                                        <div class="lumi-pnsearch" data-pnbox hidden>
+                                            <div class="lumi-pnrow">
+                                                <input class="lumi-fin" type="text" id="lumi-pnarea" placeholder="Area code (e.g. 415) or state (e.g. CA)" />
+                                                <button type="button" class="lumi-b2 sm" data-pnsearch>Search</button>
+                                            </div>
+                                            <p class="lumi-fhint" data-pnmsg>Enter an area code or state, then search for available numbers.</p>
+                                            <div class="lumi-pnresults" data-pnresults></div>
                                         </div>
                                         <?php $ai_nav('phone'); ?>
                                     </section>
@@ -2602,8 +2725,23 @@ function lumitalk_admin_css() {
     .lumi-phonehead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
     .lumi-phonehead b{font-size:13px;color:#166534;}
     .lumi-phonenum{font-size:20px;font-weight:800;color:#111827;letter-spacing:.02em;}
-    .lumi-phonetags{display:flex;gap:6px;margin:8px 0 10px;}
+    .lumi-phonetags{display:flex;gap:6px;}
     .lumi-tag{background:#fff;border:1px solid #d1d5db;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;color:#374151;}
+    .lumi-pnum{position:relative;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 12px;margin-bottom:6px;border:1px solid #bbf7d0;border-radius:8px;background:#fff;cursor:pointer;}
+    .lumi-pnum input{position:absolute;opacity:0;pointer-events:none;}
+    .lumi-pnum:has(input:checked){border-color:#22c55e;box-shadow:0 0 0 2px rgba(34,197,94,.18);}
+    .lumi-pnum .lumi-phonenum{flex:1;font-size:17px;}
+    .lumi-pnum .lumi-vck{opacity:0;color:#16a34a;}
+    .lumi-pnum:has(input:checked) .lumi-vck{opacity:1;}
+    .lumi-pnsearch{border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-top:12px;background:#fafafa;}
+    .lumi-pnrow{display:flex;gap:8px;align-items:center;}
+    .lumi-pnrow .lumi-fin{flex:1;padding:8px 10px;font-size:12.5px;}
+    .lumi-pnresults{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;}
+    .lumi-pnopt{position:relative;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;font-size:12.5px;}
+    .lumi-pnopt input{position:absolute;opacity:0;pointer-events:none;}
+    .lumi-pnopt:has(input:checked){border-color:#ec4899;background:#fdf2f8;}
+    .lumi-pnopt b{font-size:14px;color:#111827;}
+    .lumi-pnopt .loc{color:#6b7280;font-size:11.5px;flex:1;}
     /* ---- Voices ---- */
     .lumi-vfilters{display:flex;gap:8px;margin-bottom:12px;}
     .lumi-vf{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #d1d5db;border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;font-family:inherit;}
@@ -2993,6 +3131,62 @@ function lumitalk_admin_js() {
                         v.hidden = (f !== "all" && v.getAttribute("data-gender") !== f);
                     });
                 });
+            });
+
+            /* ---- Phone number picker (searches the same catalogue the app uses) ---- */
+            var pnBox     = wrap.querySelector("[data-pnbox]");
+            var pnExpand  = wrap.querySelector("[data-pnexpand]");
+            var pnResults = wrap.querySelector("[data-pnresults]");
+            var pnMsg     = wrap.querySelector("[data-pnmsg]");
+            if (pnExpand && pnBox) {
+                pnExpand.addEventListener("click", function(){ pnBox.hidden = !pnBox.hidden; });
+            }
+            var pnBtn = wrap.querySelector("[data-pnsearch]");
+            if (pnBtn && pnResults) {
+                pnBtn.addEventListener("click", function(){
+                    var area = (wrap.querySelector("#lumi-pnarea") || {}).value || "";
+                    pnBtn.disabled = true;
+                    if (pnMsg) { pnMsg.textContent = "Searching available numbers…"; }
+                    var body = "action=lumitalk_phone_search&_wpnonce=" + encodeURIComponent(L.phoneNonce || "")
+                             + "&area=" + encodeURIComponent(area);
+                    fetch(L.ajaxUrl, {
+                        method: "POST",
+                        credentials: "same-origin",
+                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        body: body
+                    }).then(function(r){ return r.json(); }).then(function(j){
+                        pnBtn.disabled = false;
+                        pnResults.textContent = "";
+                        if (!j || !j.success || !j.data || !j.data.length) {
+                            if (pnMsg) { pnMsg.textContent = (j && j.data && j.data.length === 0) ? "No numbers found for that search — try a different area code." : ((j && typeof j.data === "string") ? j.data : "No numbers found."); }
+                            return;
+                        }
+                        if (pnMsg) { pnMsg.textContent = j.data.length + " number" + (j.data.length === 1 ? "" : "s") + " available — pick one to use for voice."; }
+                        j.data.forEach(function(n){
+                            var lab = document.createElement("label");
+                            lab.className = "lumi-pnopt";
+                            var rad = document.createElement("input");
+                            rad.type = "radio"; rad.name = "phone_number"; rad.value = n.number;
+                            var b = document.createElement("b"); b.textContent = n.friendly || n.number;
+                            var loc = document.createElement("span"); loc.className = "loc"; loc.textContent = n.locality || "";
+                            lab.appendChild(rad); lab.appendChild(b); lab.appendChild(loc);
+                            (n.caps || []).forEach(function(c){
+                                var t = document.createElement("span");
+                                t.className = "lumi-tag";
+                                t.textContent = (c.toUpperCase() === "SMS" || c.toUpperCase() === "MMS") ? c.toUpperCase() : (c.charAt(0).toUpperCase() + c.slice(1));
+                                lab.appendChild(t);
+                            });
+                            rad.addEventListener("change", function(){ dot("phone", true); });
+                            pnResults.appendChild(lab);
+                        });
+                    }).catch(function(){
+                        pnBtn.disabled = false;
+                        if (pnMsg) { pnMsg.textContent = "Could not reach LumiTalk. You can pick a number after setup."; }
+                    });
+                });
+            }
+            Array.prototype.forEach.call(wrap.querySelectorAll("input[name=phone_number]"), function(r){
+                r.addEventListener("change", function(){ dot("phone", true); });
             });
 
             /* ---- Sub-tabs inside a section (SMS messages/behavior/keywords) ---- */
