@@ -2073,6 +2073,29 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                         <div class="val"><?php echo esc_html(!empty($a['name']) ? $a['name'] : 'Not set'); ?></div>
                                     </div>
                                     <div>
+                                        <h5>Agent Role :</h5>
+                                        <?php
+                                        $rv_roles = lumitalk_agent_roles();
+                                        $rv_rid   = !empty($state['agent_role']) ? $state['agent_role'] : (!empty($a['agent_role']) ? $a['agent_role'] : '');
+                                        $rv_rname = isset($rv_roles[$rv_rid]) ? $rv_roles[$rv_rid][1] : 'Not set';
+                                        ?>
+                                        <div class="val"><?php echo wp_kses_post($rv_rname); ?></div>
+                                    </div>
+                                </div>
+                                <div class="lumi-rvrow">
+                                    <div>
+                                        <h5>Languages :</h5>
+                                        <?php
+                                        $rv_lcat = lumitalk_languages();
+                                        $rv_ls   = (isset($a['languages']) && is_array($a['languages']) && $a['languages']) ? $a['languages'] : array('en-US');
+                                        $rv_lnames = array();
+                                        foreach ($rv_ls as $rv_lc) {
+                                            if (isset($rv_lcat[$rv_lc])) { $rv_lnames[] = $rv_lcat[$rv_lc][1]; }
+                                        }
+                                        ?>
+                                        <div class="val"><?php echo esc_html($rv_lnames ? implode(', ', $rv_lnames) : 'English (United States)'); ?></div>
+                                    </div>
+                                    <div>
                                         <h5>Traits :</h5>
                                         <div class="lumi-pills">
                                             <?php foreach ($sel_traits as $tid) :
