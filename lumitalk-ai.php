@@ -362,23 +362,139 @@ function lumitalk_traits() {
 
 // Redirect helpers.
 // Agent roles for the "Choose Your Agent" picker (mirrors the app's agent templates).
+/**
+ * The 12 curated agent templates, in the same order and wording the LumiTalk app
+ * uses. Icon + tagline live here; the persona text (description, first message and
+ * system instructions) is fetched from the API so the long prompts are never
+ * duplicated in the plugin.
+ *
+ * @return array roleId => array(icon, name, tagline, blurb)
+ */
 function lumitalk_agent_roles() {
     return array(
-        'support'   => array('&#127911;', 'Customer Support', 'Answers questions, order status and returns'),
-        'sales'     => array('&#128188;', 'Sales Assistant', 'Recommends products and helps customers buy'),
-        'concierge' => array('&#10024;', 'Concierge', 'Premium, white-glove guidance for your shoppers'),
-        'technical' => array('&#128296;', 'Technical Support', 'Troubleshoots product and technical issues'),
+        'customer_support'        => array('&#127911;', 'Customer Support', 'Field support inquiries', 'Customer support representative to field support inquiries'),
+        'receptionist'            => array('&#128075;', 'Front Desk Receptionist', 'Greet, inform &amp; route', 'A general front desk receptionist to handle department transfers and inquiries'),
+        'lead_qualifier'          => array('&#127919;', 'Inbound Lead Qualifier', 'Qualify &amp; route leads', 'Qualifies inbound leads from web forms and ads, assesses budget and timeline, and routes to the right sales rep'),
+        'it_helpdesk'             => array('&#128736;', 'IT Help Desk / Internal Support', 'Internal IT support', 'Internal IT support &mdash; password resets, VPN, software troubleshooting'),
+        'technical_support'       => array('&#128295;', 'Technical Support Agent', 'Troubleshoot &amp; escalate', 'Troubleshoots product issues step-by-step and escalates with support tickets'),
+        'order_tracking'          => array('&#128230;', 'Order Status &amp; Tracking', 'Orders, tracking &amp; returns', 'Handles order inquiries, tracking, delivery estimates, and basic returns'),
+        'appointment_scheduler'   => array('&#128197;', 'Appointment Scheduler', 'Check availability &amp; book', 'Scheduling agent that checks availability, books appointments, and sends confirmations for any business type'),
+        'ecommerce_cx'            => array('&#128717;', 'Ecommerce Customer Experience', 'Shop &amp; support assistant', 'Ecommerce site shopping assistant that can handle support inquiries'),
+        'realestate_followup'     => array('&#127968;', 'Real Estate Lead Follow-Up', 'Qualify buyers &amp; book showings', 'Follows up with real estate leads, qualifies buyer interest and budget, and books property showings'),
+        'accounting_receptionist' => array('&#129534;', 'Accounting / Tax Firm Receptionist', 'CPA firm front desk', 'CPA firm calls &mdash; appointments, tax deadlines, document follow-ups'),
+        'after_hours'             => array('&#127769;', 'After-Hours Answering Service', 'After-hours messages &amp; triage', 'Handles calls outside business hours, takes messages, and routes emergencies'),
+        'blank'                   => array('&#10024;', 'Blank Agent', 'Start from scratch', 'Start from scratch &mdash; a clean agent with no preset persona. Best if you want to write your own instructions.'),
     );
 }
 
+/**
+ * Persona text for each template (first message + system instructions), straight
+ * from the LumiTalk catalogue. Cached for 12 hours; static metadata, no auth needed.
+ *
+ * @return array roleId => array('description'=>, 'first_message'=>, 'system_prompt'=>)
+ */
+function lumitalk_fetch_templates() {
+    $cached = get_transient('lumitalk_templates');
+    if (is_array($cached)) { return $cached; }
+
+    $out = array();
+    $r   = wp_remote_get(lumitalk_api_url() . '/api/elevenlabs-convai/templates', array('timeout' => 15));
+    if (!is_wp_error($r) && 200 === (int) wp_remote_retrieve_response_code($r)) {
+        $body = json_decode(wp_remote_retrieve_body($r), true);
+        if (isset($body['templates']) && is_array($body['templates'])) {
+            foreach ($body['templates'] as $t) {
+                if (empty($t['id'])) { continue; }
+                $out[ $t['id'] ] = array(
+                    'description'    => isset($t['description']) ? $t['description'] : '',
+                    'first_message'  => isset($t['first_message']) ? $t['first_message'] : '',
+                    'system_prompt'  => isset($t['system_prompt']) ? $t['system_prompt'] : '',
+                );
+            }
+        }
+    }
+    // Cache misses briefly so a cold dyno doesn't pin an empty catalogue for hours.
+    set_transient('lumitalk_templates', $out, $out ? 12 * HOUR_IN_SECONDS : 5 * MINUTE_IN_SECONDS);
+    return $out;
+}
+
+/**
+ * The voice library available to this application. Cached for one hour.
+ *
+ * @return array list of array('id','name','gender','accent','use_case','preview')
+ */
+function lumitalk_fetch_voices() {
+    $s = lumitalk_get_settings();
+    if (empty($s['application_id'])) { return array(); }
+
+    $key    = 'lumitalk_voices_' . md5($s['application_id']);
+    $cached = get_transient($key);
+    if (is_array($cached)) { return $cached; }
+
+    $out = array();
+    $url = add_query_arg(
+        array('application_id' => $s['application_id']),
+        lumitalk_api_url() . '/api/elevenlabs-convai/voices'
+    );
+    $r = wp_remote_get($url, array('timeout' => 20));
+    if (!is_wp_error($r) && 200 === (int) wp_remote_retrieve_response_code($r)) {
+        $body = json_decode(wp_remote_retrieve_body($r), true);
+        if (is_array($body)) {
+            foreach ($body as $v) {
+                if (empty($v['id'])) { continue; }
+                $lb = isset($v['labels']) && is_array($v['labels']) ? $v['labels'] : array();
+                $out[] = array(
+                    'id'       => $v['id'],
+                    'name'     => isset($v['name']) ? $v['name'] : $v['id'],
+                    'gender'   => isset($lb['gender']) ? $lb['gender'] : '',
+                    'accent'   => isset($lb['accent']) ? $lb['accent'] : '',
+                    'use_case' => isset($lb['use_case']) ? $lb['use_case'] : (isset($lb['description']) ? $lb['description'] : ''),
+                    'preview'  => isset($v['preview_url']) ? $v['preview_url'] : '',
+                );
+            }
+        }
+    }
+    set_transient($key, $out, $out ? HOUR_IN_SECONDS : 5 * MINUTE_IN_SECONDS);
+    return $out;
+}
+
 // Languages the assistant can reply in.
+/**
+ * Languages selectable for Chat, Voice, SMS and Email, matching the app's
+ * catalogue. The first language is free; each additional one is billed monthly.
+ *
+ * @return array code => array(flag, name)
+ */
 function lumitalk_languages() {
     return array(
-        'en' => 'English', 'es' => 'Spanish', 'fr' => 'French', 'de' => 'German',
-        'pt' => 'Portuguese', 'it' => 'Italian', 'nl' => 'Dutch', 'hi' => 'Hindi',
-        'ar' => 'Arabic', 'ja' => 'Japanese',
+        'en-US'  => array('&#127482;&#127480;', 'English (United States)'),
+        'en-GB'  => array('&#127468;&#127463;', 'English (United Kingdom)'),
+        'en-AU'  => array('&#127462;&#127482;', 'English (Australia)'),
+        'en-IN'  => array('&#127470;&#127475;', 'English (India)'),
+        'es-ES'  => array('&#127466;&#127480;', 'Spanish (Spain)'),
+        'es-US'  => array('&#127482;&#127480;', 'Spanish (United States)'),
+        'fr-FR'  => array('&#127467;&#127479;', 'French (France)'),
+        'fr-CA'  => array('&#127464;&#127462;', 'French (Canada)'),
+        'de-DE'  => array('&#127465;&#127466;', 'German (Germany)'),
+        'it-IT'  => array('&#127470;&#127481;', 'Italian (Italy)'),
+        'pt-BR'  => array('&#127463;&#127479;', 'Portuguese (Brazil)'),
+        'pt-PT'  => array('&#127477;&#127481;', 'Portuguese (Portugal)'),
+        'nl-NL'  => array('&#127475;&#127473;', 'Dutch (Netherlands)'),
+        'hi-IN'  => array('&#127470;&#127475;', 'Hindi (India)'),
+        'ta-IN'  => array('&#127470;&#127475;', 'Tamil (India)'),
+        'te-IN'  => array('&#127470;&#127475;', 'Telugu (India)'),
+        'ar-SA'  => array('&#127462;&#127466;', 'Arabic (Saudi Arabia)'),
+        'ja-JP'  => array('&#127471;&#127477;', 'Japanese (Japan)'),
+        'ko-KR'  => array('&#127472;&#127479;', 'Korean (South Korea)'),
+        'cmn-CN' => array('&#127464;&#127475;', 'Chinese Mandarin (China)'),
+        'th-TH'  => array('&#127481;&#127469;', 'Thai (Thailand)'),
+        'vi-VN'  => array('&#127483;&#127475;', 'Vietnamese (Vietnam)'),
+        'id-ID'  => array('&#127470;&#127465;', 'Indonesian (Indonesia)'),
+        'fil-PH' => array('&#127477;&#127469;', 'Filipino (Philippines)'),
     );
 }
+
+/** Monthly price of each language beyond the first. */
+function lumitalk_language_price() { return 25; }
 
 function lumitalk_redirect_with($key, $value) {
     wp_safe_redirect(add_query_arg(array('page' => 'lumitalk-ai', $key => $value), admin_url('admin.php')));
@@ -659,14 +775,21 @@ add_action('admin_post_lumitalk_onb_assistant', function () {
     $tone     = isset($_POST['ai_tone']) ? sanitize_key(wp_unslash($_POST['ai_tone'])) : 'friendly';
     $traits   = (isset($_POST['traits']) && is_array($_POST['traits']))
         ? array_map('sanitize_key', wp_unslash($_POST['traits'])) : array();
+    $instr    = isset($_POST['ai_instructions']) ? sanitize_textarea_field(wp_unslash($_POST['ai_instructions'])) : '';
     $agent    = isset($_POST['agent_role']) ? sanitize_key(wp_unslash($_POST['agent_role'])) : '';
-    $langs    = (isset($_POST['languages']) && is_array($_POST['languages']))
-        ? array_map('sanitize_key', wp_unslash($_POST['languages'])) : array();
+    // Language codes are locale-style (en-US), which sanitize_key would lowercase.
+    $lang_cat = lumitalk_languages();
+    $langs    = array();
+    if (isset($_POST['languages']) && is_array($_POST['languages'])) {
+        $posted_langs = array_map('sanitize_text_field', wp_unslash($_POST['languages']));
+        foreach ($posted_langs as $lc) {
+            if (isset($lang_cat[ $lc ]) && !in_array($lc, $langs, true)) { $langs[] = $lc; }
+        }
+    }
     // Channel sections — only posted when that channel is enabled in step 1.
     $phone  = isset($_POST['phone_number']) ? sanitize_text_field(wp_unslash($_POST['phone_number'])) : '';
-    $voice  = isset($_POST['voice']) ? sanitize_key(wp_unslash($_POST['voice'])) : '';
+    $voice  = isset($_POST['voice']) ? sanitize_text_field(wp_unslash($_POST['voice'])) : '';
     $vspeed = isset($_POST['voice_speed']) ? sanitize_key(wp_unslash($_POST['voice_speed'])) : '';
-    $smsg   = isset($_POST['sms_greeting']) ? sanitize_text_field(wp_unslash($_POST['sms_greeting'])) : '';
     $efrom  = isset($_POST['email_from']) ? sanitize_text_field(wp_unslash($_POST['email_from'])) : '';
     $esig   = isset($_POST['email_signature']) ? sanitize_text_field(wp_unslash($_POST['email_signature'])) : '';
     $ccolor = isset($_POST['chat_color']) ? sanitize_hex_color(wp_unslash($_POST['chat_color'])) : '';
@@ -676,21 +799,57 @@ add_action('admin_post_lumitalk_onb_assistant', function () {
     // The API accepts a fixed set of fields, so the per-channel settings ride along
     // inside `assistant` / `chatWidget` rather than being dropped.
     $assistant = array('name' => $name, 'greeting' => $greeting, 'business_description' => $desc, 'tone' => $tone);
+    if ($instr)  { $assistant['system_instructions'] = $instr; }
     if ($agent)  { $assistant['agent_role'] = $agent; }
     if ($langs)  { $assistant['languages'] = $langs; }
     if ($phone)  { $assistant['phone_number'] = $phone; }
     if ($voice)  { $assistant['voice'] = $voice; }
     if ($vspeed) { $assistant['voice_speed'] = $vspeed; }
-    if ($smsg)   { $assistant['sms_greeting'] = $smsg; }
     if ($efrom)  { $assistant['email_from'] = $efrom; }
     if ($esig)   { $assistant['email_signature'] = $esig; }
 
+    // Per-channel persona overrides (only meaningful when "Customize …" is on).
+    foreach (array('voice', 'chat', 'sms', 'email') as $ch) {
+        $assistant[ $ch . '_custom_personality' ] = !empty($_POST[ $ch . '_custom_personality' ]);
+        foreach (array('name', 'greeting', 'instructions') as $pf) {
+            $pk = $ch . '_' . $pf;
+            if (!isset($_POST[ $pk ])) { continue; }
+            $pv = ('instructions' === $pf)
+                ? sanitize_textarea_field(wp_unslash($_POST[ $pk ]))
+                : sanitize_text_field(wp_unslash($_POST[ $pk ]));
+            if ('' !== $pv) { $assistant[ $pk ] = $pv; }
+        }
+    }
+
+    // SMS message set + behaviour.
+    foreach (array('sms_greeting', 'sms_autoreply', 'sms_optout', 'sms_error', 'sms_keywords') as $sk) {
+        if (isset($_POST[ $sk ])) {
+            $sv = sanitize_textarea_field(wp_unslash($_POST[ $sk ]));
+            if ('' !== $sv) { $assistant[ $sk ] = $sv; }
+        }
+    }
+    foreach (array('sms_afterhours', 'sms_confirm') as $sk) {
+        $assistant[ $sk ] = !empty($_POST[ $sk ]);
+    }
+
     $body = array('assistant' => $assistant, 'personalityTraits' => $traits);
     if ($agent) { $body['agentRole'] = $agent; }
+
     $widget = array();
     if ($ccolor) { $widget['primaryColor'] = $ccolor; }
     if ($cpos)   { $widget['position'] = $cpos; }
     if ($cwel)   { $widget['welcomeMessage'] = $cwel; }
+    if (isset($_POST['chat_icon']))        { $widget['iconStyle']   = sanitize_key(wp_unslash($_POST['chat_icon'])); }
+    if (isset($_POST['chat_theme']))       { $widget['theme']       = sanitize_key(wp_unslash($_POST['chat_theme'])); }
+    if (isset($_POST['chat_placeholder'])) { $widget['placeholder'] = sanitize_text_field(wp_unslash($_POST['chat_placeholder'])); }
+    if (isset($_POST['chat_domains'])) {
+        $doms = array_filter(array_map('trim', explode("\n", sanitize_textarea_field(wp_unslash($_POST['chat_domains'])))));
+        if ($doms) { $widget['allowedDomains'] = array_values(array_map('esc_url_raw', $doms)); }
+    }
+    $widget['autoOpen']     = !empty($_POST['chat_autoopen']);
+    $widget['showOnMobile'] = !empty($_POST['chat_mobile']);
+    $widget['sound']        = !empty($_POST['chat_sound']);
+    $widget['typing']       = !empty($_POST['chat_typing']);
     if ($widget) { $body['chatWidget'] = $widget; }
 
     lumitalk_embed_post('/marketplace/embed/save', $body);
@@ -1272,37 +1431,57 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                     <?php elseif ($step === 'assistant') : ?>
                         <input type="hidden" name="action" value="lumitalk_onb_assistant" />
                         <?php
-                        $a    = isset($state['assistant']) && is_array($state['assistant']) ? $state['assistant'] : array();
-                        $prof = isset($state['storeProfile']) && is_array($state['storeProfile']) ? $state['storeProfile'] : array();
-                        $name = !empty($a['name']) ? $a['name'] : (get_bloginfo('name') . ' Assistant');
-                        $greet = !empty($a['greeting']) ? $a['greeting'] : 'Hi! How can I help you today?';
-                        $desc  = !empty($a['business_description']) ? $a['business_description'] : (isset($prof['description']) ? $prof['description'] : get_bloginfo('description'));
-                        $tone  = !empty($a['tone']) ? $a['tone'] : 'friendly';
+                        $a     = isset($state['assistant']) && is_array($state['assistant']) ? $state['assistant'] : array();
+                        $prof  = isset($state['storeProfile']) && is_array($state['storeProfile']) ? $state['storeProfile'] : array();
+                        $cw    = isset($state['chatWidget']) && is_array($state['chatWidget']) ? $state['chatWidget'] : array();
+                        $agv   = function ($k, $d = '') use ($a) { return (isset($a[$k]) && '' !== $a[$k]) ? $a[$k] : $d; };
+
+                        $roles = lumitalk_agent_roles();
+                        $tmpl  = lumitalk_fetch_templates();
+                        $agent_sel = !empty($state['agent_role']) ? $state['agent_role'] : $agv('agent_role', 'customer_support');
+                        if (!isset($roles[$agent_sel])) { $agent_sel = 'customer_support'; }
+                        $tsel = isset($tmpl[$agent_sel]) ? $tmpl[$agent_sel] : array();
+                        $tget = function ($k) use ($tsel) { return isset($tsel[$k]) ? $tsel[$k] : ''; };
+
+                        $name  = $agv('name', get_bloginfo('name') . ' Assistant');
+                        $desc  = $agv('business_description', $tget('description'));
+                        if ('' === $desc && !empty($prof['description'])) { $desc = $prof['description']; }
+                        $greet = $agv('greeting', $tget('first_message'));
+                        if ('' === $greet) { $greet = 'Hi! How can I help you today?'; }
+                        $instr = $agv('system_instructions', $tget('system_prompt'));
+                        $tone  = $agv('tone', 'friendly');
                         $tr    = (isset($state['personalityTraits']) && is_array($state['personalityTraits']) && $state['personalityTraits'])
                             ? $state['personalityTraits'] : array('friendly', 'professional', 'helpful');
-                        $agent_sel = !empty($state['agent_role']) ? $state['agent_role']
-                            : (!empty($a['agent_role']) ? $a['agent_role'] : 'support');
-                        $langs_sel = (isset($a['languages']) && is_array($a['languages']) && $a['languages'])
-                            ? $a['languages'] : array('en');
-                        $cw = isset($state['chatWidget']) && is_array($state['chatWidget']) ? $state['chatWidget'] : array();
-                        $agv = function ($k, $d = '') use ($a) { return isset($a[$k]) ? $a[$k] : $d; };
 
-                        // Sections mirror the app's AI & Channel Setup step: a shared
-                        // "AI Personality"/"Languages" pair plus one section per enabled channel.
+                        $lang_cat  = lumitalk_languages();
+                        $langs_sel = (isset($a['languages']) && is_array($a['languages']) && $a['languages']) ? $a['languages'] : array('en-US');
+                        $langs_sel = array_values(array_filter($langs_sel, function ($c) use ($lang_cat) { return isset($lang_cat[$c]); }));
+                        if (!$langs_sel) { $langs_sel = array('en-US'); }
+                        $lang_price = lumitalk_language_price();
+
+                        $voices = lumitalk_fetch_voices();
+                        $v_f = 0; $v_m = 0;
+                        foreach ($voices as $v) {
+                            if ('female' === strtolower($v['gender'])) { $v_f++; }
+                            elseif ('male' === strtolower($v['gender'])) { $v_m++; }
+                        }
+                        $voice_sel = $agv('voice');
+                        if ('' === $voice_sel && $voices) { $voice_sel = $voices[0]['id']; }
+                        $phone_num = $agv('phone_number');
+
                         $ai_secs = array(
                             'global'    => array('AI Personality', true, ('' !== $name && '' !== $greet && '' !== $desc)),
                             'languages' => array('Languages', true, (count($langs_sel) > 0)),
                         );
                         if (in_array('voice', $enabled_keys, true)) {
-                            $ai_secs['phone'] = array('Phone Number', false, ('' !== $agv('phone_number')));
-                            $ai_secs['voice'] = array('Voice Settings', true, true);
+                            $ai_secs['phone'] = array('Phone Number', false, ('' !== $phone_num));
+                            $ai_secs['voice'] = array('Voice Settings', true, ('' !== $voice_sel));
                         }
                         if (in_array('chat', $enabled_keys, true))  { $ai_secs['chat']  = array('Chat Settings', true, true); }
                         if (in_array('sms', $enabled_keys, true))   { $ai_secs['sms']   = array('SMS Settings', true, true); }
                         if (in_array('email', $enabled_keys, true)) { $ai_secs['email'] = array('Email Settings', true, true); }
                         $ai_keys = array_keys($ai_secs);
 
-                        // Back/Next pager between sections, matching the app's sub-page nav.
                         $ai_nav = function ($cur) use ($ai_keys) {
                             $i    = array_search($cur, $ai_keys, true);
                             $prev = ($i > 0) ? $ai_keys[ $i - 1 ] : '';
@@ -1312,34 +1491,82 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                             echo $next ? '<button type="button" class="lumi-b2" data-goto="' . esc_attr($next) . '">Next</button>' : '<span></span>';
                             echo '</div>';
                         };
-                        ?>
-                        <div class="lumi-agentpick">
-                            <h3 class="lumi-h3">Choose Your Agent</h3>
-                            <p class="lumi-subtle">Pick the role your AI plays. This shapes how it greets and helps your customers.</p>
-                            <div class="lumi-arles">
-                                <?php foreach (lumitalk_agent_roles() as $rid => $r) : ?>
-                                    <label class="lumi-arole">
-                                        <input type="radio" name="agent_role" value="<?php echo esc_attr($rid); ?>" <?php checked($agent_sel, $rid); ?> />
-                                        <span class="ico"><?php echo wp_kses_post($r[0]); ?></span>
-                                        <span class="nm"><?php echo esc_html($r[1]); ?></span>
-                                        <span class="ds"><?php echo esc_html($r[2]); ?></span>
-                                        <span class="ck">&#10003;</span>
-                                    </label>
-                                <?php endforeach; ?>
+
+                        // Per-channel persona overrides. Each channel may either follow the
+                        // global persona or carry its own copy.
+                        $chan_persona = function ($key, $label) use ($a, $name, $greet, $instr) {
+                            $on = !empty($a[ $key . '_custom_personality' ]);
+                            $n  = isset($a[ $key . '_name' ]) && '' !== $a[ $key . '_name' ] ? $a[ $key . '_name' ] : $name;
+                            $g  = isset($a[ $key . '_greeting' ]) && '' !== $a[ $key . '_greeting' ] ? $a[ $key . '_greeting' ] : $greet;
+                            $i  = isset($a[ $key . '_instructions' ]) && '' !== $a[ $key . '_instructions' ] ? $a[ $key . '_instructions' ] : $instr;
+                            ?>
+                            <label class="lumi-toggle">
+                                <input type="checkbox" name="<?php echo esc_attr($key); ?>_custom_personality" value="1" data-persona-toggle="<?php echo esc_attr($key); ?>" <?php checked($on); ?> />
+                                <span class="lumi-tgl"></span>
+                                <span>Customize <?php echo esc_html($label); ?> personality</span>
+                            </label>
+                            <div class="lumi-persona" data-persona="<?php echo esc_attr($key); ?>" <?php echo $on ? '' : 'hidden'; ?>>
+                                <div class="lumi-fg">
+                                    <label class="lumi-flb" for="lumi-<?php echo esc_attr($key); ?>-nm">Agent Name</label>
+                                    <input class="lumi-fin" id="lumi-<?php echo esc_attr($key); ?>-nm" type="text" name="<?php echo esc_attr($key); ?>_name" value="<?php echo esc_attr($n); ?>" data-pf="name" />
+                                </div>
+                                <div class="lumi-fg">
+                                    <label class="lumi-flb" for="lumi-<?php echo esc_attr($key); ?>-gr">Greeting</label>
+                                    <input class="lumi-fin" id="lumi-<?php echo esc_attr($key); ?>-gr" type="text" name="<?php echo esc_attr($key); ?>_greeting" value="<?php echo esc_attr($g); ?>" data-pf="greeting" />
+                                </div>
+                                <div class="lumi-fg">
+                                    <label class="lumi-flb" for="lumi-<?php echo esc_attr($key); ?>-in">System Instructions</label>
+                                    <textarea class="lumi-fin lumi-mono" id="lumi-<?php echo esc_attr($key); ?>-in" name="<?php echo esc_attr($key); ?>_instructions" rows="10" data-pf="instructions"><?php echo esc_textarea($i); ?></textarea>
+                                </div>
+                                <div class="lumi-syncrow">
+                                    <button type="button" class="lumi-b3 sm" data-sync="from" data-chan="<?php echo esc_attr($key); ?>">Sync From Global</button>
+                                    <button type="button" class="lumi-b3 sm" data-sync="to" data-chan="<?php echo esc_attr($key); ?>">Save to Global</button>
+                                </div>
                             </div>
-                        </div>
+                            <?php
+                        };
+                        ?>
 
                         <div class="lumi-two">
                             <div class="lumi-two-main">
 
                                 <section class="lumi-sp" data-sec="global">
-                                    <h4 class="lumi-sph">AI Personality</h4>
-                                    <p class="lumi-spsub">Give your assistant a name, a tone and the context it needs about your business.</p>
-                                    <div class="lumi-sec-b">
+                                    <h4 class="lumi-sph">Global AI Settings</h4>
+                                    <p class="lumi-spsub">Configure your AI's core functionality that will be used across all communication channels &mdash; you'll be able to configure it in more detail later.</p>
+
+                                    <div class="lumi-agentpick">
+                                        <div class="lumi-apk-h">
+                                            <h5>Choose Your AI Agent</h5>
+                                            <span class="lumi-apk-note">Preloads the persona &mdash; everything below stays editable</span>
+                                        </div>
+                                        <p class="lumi-fhint" style="margin:0 0 14px;">Pick the role that best fits. We'll provision a dedicated AI voice agent for it, wired to your products, orders, and policies.</p>
+                                        <div class="lumi-arles">
+                                            <?php $ri = 0; foreach ($roles as $rid => $r) : $rt = isset($tmpl[$rid]) ? $tmpl[$rid] : array(); $ri++; ?>
+                                                <label class="lumi-arole<?php echo ($ri > 6) ? ' lumi-more' : ''; ?>"<?php echo ($ri > 6) ? ' hidden' : ''; ?>>
+                                                    <input type="radio" name="agent_role" value="<?php echo esc_attr($rid); ?>" <?php checked($agent_sel, $rid); ?>
+                                                        data-desc="<?php echo esc_attr(isset($rt['description']) ? $rt['description'] : wp_strip_all_tags($r[3])); ?>"
+                                                        data-greeting="<?php echo esc_attr(isset($rt['first_message']) ? $rt['first_message'] : ''); ?>"
+                                                        data-instructions="<?php echo esc_attr(isset($rt['system_prompt']) ? $rt['system_prompt'] : ''); ?>" />
+                                                    <span class="ico"><?php echo wp_kses_post($r[0]); ?></span>
+                                                    <span class="nm"><?php echo wp_kses_post($r[1]); ?></span>
+                                                    <span class="tg"><?php echo wp_kses_post($r[2]); ?></span>
+                                                    <span class="ds"><?php echo wp_kses_post($r[3]); ?></span>
+                                                    <span class="ck">&#10003;</span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <button type="button" class="lumi-showmore" data-showmore>Show more agents (<?php echo esc_html((string) (count($roles) - 6)); ?>)</button>
+                                    </div>
+
+                                    <div class="lumi-syncbar">
+                                        <span class="lumi-syncmsg">Use the sync buttons to keep all channels consistent</span>
+                                        <button type="button" class="lumi-b3 sm" data-copyall>Copy to All Channels</button>
+                                    </div>
+
                                     <div class="lumi-f2">
                                         <div>
                                             <label class="lumi-flb" for="lumi-ai-name">Agent Name <em>*</em></label>
-                                            <input class="lumi-fin" id="lumi-ai-name" type="text" name="ai_name" maxlength="60" value="<?php echo esc_attr($name); ?>" placeholder="e.g., Lisa, Alex, Jordan" />
+                                            <input class="lumi-fin" id="lumi-ai-name" type="text" name="ai_name" maxlength="60" required value="<?php echo esc_attr($name); ?>" placeholder="e.g., Aria, Alex, Jordan" data-req="global" data-gf="name" />
                                         </div>
                                         <div>
                                             <label class="lumi-flb" for="lumi-ai-tone">Tone</label>
@@ -1350,14 +1577,20 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                             </select>
                                         </div>
                                     </div>
-                                    <div class="lumi-f1">
+                                    <div class="lumi-fg">
+                                        <label class="lumi-flb" for="lumi-ai-desc">Description <em>*</em></label>
+                                        <textarea class="lumi-fin" id="lumi-ai-desc" name="ai_desc" rows="3" maxlength="600" required placeholder="What this agent does and what your business offers" data-req="global" data-gf="desc"><?php echo esc_textarea($desc); ?></textarea>
+                                    </div>
+                                    <div class="lumi-fg">
                                         <label class="lumi-flb" for="lumi-ai-greeting">Default Greeting Message <em>*</em></label>
-                                        <textarea class="lumi-fin" id="lumi-ai-greeting" name="ai_greeting" rows="3" maxlength="300" placeholder="The first thing your AI says when someone contacts you"><?php echo esc_textarea($greet); ?></textarea>
+                                        <textarea class="lumi-fin" id="lumi-ai-greeting" name="ai_greeting" rows="2" maxlength="300" required placeholder="The first thing your AI says when someone contacts you" data-req="global" data-gf="greeting"><?php echo esc_textarea($greet); ?></textarea>
                                     </div>
-                                    <div class="lumi-f1">
-                                        <label class="lumi-flb" for="lumi-ai-desc">Business Description <em>*</em></label>
-                                        <textarea class="lumi-fin" id="lumi-ai-desc" name="ai_desc" rows="5" maxlength="600" placeholder="Tell the AI what your business does &mdash; products, services, and policies"><?php echo esc_textarea($desc); ?></textarea>
+                                    <div class="lumi-fg">
+                                        <label class="lumi-flb" for="lumi-ai-instr">System Instructions <em>*</em></label>
+                                        <textarea class="lumi-fin lumi-mono" id="lumi-ai-instr" name="ai_instructions" rows="14" required placeholder="Personality, environment, tone, goal and tool rules for your agent" data-req="global" data-gf="instructions"><?php echo esc_textarea($instr); ?></textarea>
+                                        <p class="lumi-fhint">Preloaded from the agent you picked above. Edit freely &mdash; this is what your AI follows.</p>
                                     </div>
+
                                     <span class="lumi-flb" style="display:block;margin-bottom:8px;">Personality Traits</span>
                                     <div class="lumi-trs">
                                         <?php foreach (lumitalk_traits() as $tid => $tdef) : ?>
@@ -1369,128 +1602,328 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                             </label>
                                         <?php endforeach; ?>
                                     </div>
-                                </div>
                                     <?php $ai_nav('global'); ?>
                                 </section>
 
                                 <section class="lumi-sp" data-sec="languages" hidden>
-                                    <h4 class="lumi-sph">Languages</h4>
-                                    <p class="lumi-spsub">Languages your assistant can understand and reply in.</p>
-                                    <div class="lumi-sec-b">
-                                    <div class="lumi-langs">
-                                        <?php foreach (lumitalk_languages() as $lc => $ln) : ?>
-                                            <label class="lumi-lang">
-                                                <input type="checkbox" name="languages[]" value="<?php echo esc_attr($lc); ?>" <?php checked(in_array($lc, $langs_sel, true)); ?> />
-                                                <?php echo esc_html($ln); ?>
-                                            </label>
+                                    <h4 class="lumi-sph">Language Configuration</h4>
+                                    <p class="lumi-spsub">Select languages for Chat, Voice, SMS and Email.</p>
+
+                                    <div class="lumi-langbar">
+                                        <span>Additional languages: <b data-lang-extra>$<?php echo esc_html((string) ((count($langs_sel) - 1) * $lang_price)); ?>/mo</b></span>
+                                        <span class="lumi-langadd">
+                                            <select class="lumi-fin" id="lumi-langpick">
+                                                <?php foreach ($lang_cat as $lc => $ld) : ?>
+                                                    <option value="<?php echo esc_attr($lc); ?>" data-flag="<?php echo esc_attr($ld[0]); ?>"><?php echo wp_kses_post($ld[0]); ?> <?php echo esc_html($ld[1]); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <button type="button" class="lumi-b2 sm" data-langadd>Add Language</button>
+                                        </span>
+                                    </div>
+
+                                    <div class="lumi-langlist">
+                                        <?php foreach ($langs_sel as $li => $lc) :
+                                            $ld = $lang_cat[$lc]; ?>
+                                            <div class="lumi-langcard<?php echo (0 === $li) ? ' primary' : ''; ?>" data-lang="<?php echo esc_attr($lc); ?>">
+                                                <input type="hidden" name="languages[]" value="<?php echo esc_attr($lc); ?>" />
+                                                <div class="lumi-langflag"><?php echo wp_kses_post($ld[0]); ?></div>
+                                                <div class="lumi-langbody">
+                                                    <div class="lumi-langtop">
+                                                        <b><?php echo wp_kses_post($ld[0]); ?> <?php echo esc_html($ld[1]); ?></b>
+                                                        <span class="lumi-badge<?php echo (0 === $li) ? ' pri' : ''; ?>" data-pribadge><?php echo (0 === $li) ? 'Primary' : ''; ?></span>
+                                                        <span class="lumi-langcost"><?php echo (0 === $li) ? 'Free' : '+$' . esc_html((string) $lang_price) . '/mo'; ?></span>
+                                                        <button type="button" class="lumi-lnk" data-setpri<?php echo (0 === $li) ? ' hidden' : ''; ?>>Set as Primary</button>
+                                                        <button type="button" class="lumi-x" data-langdel aria-label="Remove language"<?php echo (0 === $li) ? ' hidden' : ''; ?>>&times;</button>
+                                                    </div>
+                                                    <div class="lumi-langcaps">
+                                                        <span>&#10003; Chat translation</span>
+                                                        <span>&#10003; Voice recognition</span>
+                                                        <span>&#10003; SMS in <?php echo esc_html($ld[1]); ?></span>
+                                                        <span>&#10003; Email in <?php echo esc_html($ld[1]); ?></span>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         <?php endforeach; ?>
                                     </div>
-                                </div>
+
+                                    <div class="lumi-langtotal">
+                                        <div>
+                                            <b>Total Language Cost</b>
+                                            <span data-lang-count><?php echo esc_html((string) count($langs_sel)); ?> language<?php echo (1 === count($langs_sel)) ? '' : 's'; ?> selected</span>
+                                        </div>
+                                        <div class="lumi-langsum">
+                                            <b data-lang-total>$<?php echo esc_html((string) ((count($langs_sel) - 1) * $lang_price)); ?>/mo</b>
+                                            <span data-lang-extracount><?php echo (1 === count($langs_sel)) ? 'First language free' : esc_html((string) (count($langs_sel) - 1)) . ' additional'; ?></span>
+                                        </div>
+                                    </div>
                                     <?php $ai_nav('languages'); ?>
                                 </section>
 
-                            <?php if (in_array('voice', $enabled_keys, true)) : ?>
-                                <section class="lumi-sp" data-sec="phone" hidden>
-                                    <h4 class="lumi-sph">Phone Number</h4>
-                                    <p class="lumi-spsub">The number customers call to reach your voice assistant.</p>
-                                    <div class="lumi-sec-b">
-                                        <label class="lumi-flb" for="lumi-phone">Phone number for voice calls</label>
-                                        <input class="lumi-fin" id="lumi-phone" type="text" name="phone_number" value="<?php echo esc_attr($agv('phone_number')); ?>" placeholder="+1 555 123 4567" />
-                                        <p class="lumi-fhint">Leave blank to provision a number in LumiTalk after setup.</p>
-                                    </div>
-                                    <?php $ai_nav('phone'); ?>
-                                </section>
-                                <section class="lumi-sp" data-sec="voice" hidden>
-                                    <h4 class="lumi-sph">Voice Settings</h4>
-                                    <p class="lumi-spsub">How your assistant sounds when it answers the phone.</p>
-                                    <div class="lumi-sec-b">
-                                        <div class="lumi-f2">
-                                            <div>
-                                                <label class="lumi-flb" for="lumi-voice">Voice</label>
-                                                <select class="lumi-fin" id="lumi-voice" name="voice">
-                                                    <?php foreach (array('aria' => 'Aria (Female, warm)', 'roger' => 'Roger (Male, casual)', 'sarah' => 'Sarah (Female, professional)', 'george' => 'George (Male, calm)') as $vk => $vl) : ?>
-                                                        <option value="<?php echo esc_attr($vk); ?>" <?php selected($agv('voice', 'aria'), $vk); ?>><?php echo esc_html($vl); ?></option>
-                                                    <?php endforeach; ?>
-                                                </select>
+                                <?php if (in_array('voice', $enabled_keys, true)) : ?>
+                                    <section class="lumi-sp" data-sec="phone" hidden>
+                                        <h4 class="lumi-sph">Phone Number</h4>
+                                        <p class="lumi-spsub">The number customers call to reach your voice assistant.</p>
+                                        <?php if ('' !== $phone_num) : ?>
+                                            <div class="lumi-phonecard">
+                                                <div class="lumi-phonehead">
+                                                    <b>&#10003; Phone Number Confirmed</b>
+                                                    <span class="lumi-badge pri">1 Number</span>
+                                                </div>
+                                                <div class="lumi-phonenum"><?php echo esc_html($phone_num); ?></div>
+                                                <div class="lumi-phonetags">
+                                                    <span class="lumi-tag">Voice</span>
+                                                    <?php if (in_array('sms', $enabled_keys, true)) : ?><span class="lumi-tag">SMS</span><?php endif; ?>
+                                                </div>
+                                                <div class="lumi-connrow"><span>Monthly Cost:</span><b>$0/month</b></div>
+                                                <p class="lumi-fhint">&#10003; First number included FREE</p>
                                             </div>
-                                            <div>
-                                                <label class="lumi-flb" for="lumi-vspeed">Speaking speed</label>
-                                                <select class="lumi-fin" id="lumi-vspeed" name="voice_speed">
-                                                    <?php foreach (array('slow' => 'Slow', 'normal' => 'Normal', 'fast' => 'Fast') as $sk => $sl) : ?>
-                                                        <option value="<?php echo esc_attr($sk); ?>" <?php selected($agv('voice_speed', 'normal'), $sk); ?>><?php echo esc_html($sl); ?></option>
-                                                    <?php endforeach; ?>
-                                                </select>
+                                        <?php endif; ?>
+                                        <div class="lumi-fg">
+                                            <label class="lumi-flb" for="lumi-phone">Phone number for voice calls</label>
+                                            <input class="lumi-fin" id="lumi-phone" type="text" name="phone_number" value="<?php echo esc_attr($phone_num); ?>" placeholder="+1 555 123 4567" />
+                                            <p class="lumi-fhint">Leave blank to provision a number in LumiTalk after setup. Additional numbers can be added there too.</p>
+                                        </div>
+                                        <?php $ai_nav('phone'); ?>
+                                    </section>
+
+                                    <section class="lumi-sp" data-sec="voice" hidden>
+                                        <h4 class="lumi-sph">Agent Voice</h4>
+                                        <p class="lumi-spsub">Choose the voice for your AI agent &mdash; selecting one syncs it to your AI agent.</p>
+                                        <?php if ($voices) : ?>
+                                            <div class="lumi-vfilters">
+                                                <button type="button" class="lumi-vf on" data-vf="all">All<b><?php echo esc_html((string) count($voices)); ?></b></button>
+                                                <button type="button" class="lumi-vf" data-vf="female">Female<b><?php echo esc_html((string) $v_f); ?></b></button>
+                                                <button type="button" class="lumi-vf" data-vf="male">Male<b><?php echo esc_html((string) $v_m); ?></b></button>
+                                            </div>
+                                            <div class="lumi-voices">
+                                                <?php foreach ($voices as $v) : ?>
+                                                    <label class="lumi-voice" data-gender="<?php echo esc_attr(strtolower($v['gender'])); ?>">
+                                                        <input type="radio" name="voice" value="<?php echo esc_attr($v['id']); ?>" <?php checked($voice_sel, $v['id']); ?> />
+                                                        <?php if ($v['preview']) : ?>
+                                                            <button type="button" class="lumi-play" data-preview="<?php echo esc_url($v['preview']); ?>" aria-label="Play voice preview">&#9654;</button>
+                                                        <?php else : ?>
+                                                            <span class="lumi-play off">&#9654;</span>
+                                                        <?php endif; ?>
+                                                        <span class="lumi-vname"><?php echo esc_html($v['name']); ?></span>
+                                                        <span class="lumi-vtags">
+                                                            <?php foreach (array($v['gender'], $v['accent'], $v['use_case']) as $tg) : ?>
+                                                                <?php if ('' !== $tg) : ?><i><?php echo esc_html($tg); ?></i><?php endif; ?>
+                                                            <?php endforeach; ?>
+                                                        </span>
+                                                        <span class="lumi-vck">&#10003;</span>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php else : ?>
+                                            <div class="lumi-alert">The voice library will be available once your account finishes provisioning. You can pick a voice in LumiTalk right after setup.</div>
+                                        <?php endif; ?>
+
+                                        <div class="lumi-fg" style="margin-top:22px;">
+                                            <label class="lumi-flb" for="lumi-vspeed">Speaking speed</label>
+                                            <select class="lumi-fin" id="lumi-vspeed" name="voice_speed">
+                                                <?php foreach (array('slow' => 'Slow', 'normal' => 'Normal', 'fast' => 'Fast') as $sk => $sl) : ?>
+                                                    <option value="<?php echo esc_attr($sk); ?>" <?php selected($agv('voice_speed', 'normal'), $sk); ?>><?php echo esc_html($sl); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+
+                                        <h5 class="lumi-subh">Voice Configuration</h5>
+                                        <?php $chan_persona('voice', 'voice'); ?>
+                                        <?php $ai_nav('voice'); ?>
+                                    </section>
+                                <?php endif; ?>
+
+                                <?php if (in_array('chat', $enabled_keys, true)) : ?>
+                                    <section class="lumi-sp" data-sec="chat" hidden>
+                                        <h4 class="lumi-sph">Chat Configuration</h4>
+                                        <p class="lumi-spsub">Configure how your AI behaves in chat conversations.</p>
+                                        <?php $chan_persona('chat', 'chat'); ?>
+
+                                        <h5 class="lumi-subh">Chat Widget Settings</h5>
+                                        <p class="lumi-fhint" style="margin:-8px 0 16px;">Configure your chat widget appearance and behavior.</p>
+
+                                        <div class="lumi-fg">
+                                            <span class="lumi-flb">Widget Position</span>
+                                            <div class="lumi-segs">
+                                                <?php $cpos = !empty($cw['position']) ? $cw['position'] : 'bottom-right'; ?>
+                                                <label class="lumi-seg"><input type="radio" name="chat_position" value="bottom-left" <?php checked($cpos, 'bottom-left'); ?> /><span>&larr; Bottom Left</span></label>
+                                                <label class="lumi-seg"><input type="radio" name="chat_position" value="bottom-right" <?php checked($cpos, 'bottom-right'); ?> /><span>Bottom Right &rarr;</span></label>
                                             </div>
                                         </div>
-                                    </div>
-                                    <?php $ai_nav('voice'); ?>
-                                </section>
-                            <?php endif; ?>
 
-                            <?php if (in_array('chat', $enabled_keys, true)) : ?>
-                                <section class="lumi-sp" data-sec="chat" hidden>
-                                    <h4 class="lumi-sph">Chat Settings</h4>
-                                    <p class="lumi-spsub">Appearance and behaviour of the chat widget on your site.</p>
-                                    <div class="lumi-sec-b">
+                                        <div class="lumi-fg">
+                                            <span class="lumi-flb">Chat Icon Style</span>
+                                            <div class="lumi-icons">
+                                                <?php $cico = !empty($cw['iconStyle']) ? $cw['iconStyle'] : 'bubble';
+                                                foreach (array('bubble' => '&#128172;', 'chat' => '&#128489;', 'support' => '&#127911;', 'sparkle' => '&#10024;') as $ik => $iv) : ?>
+                                                    <label class="lumi-icopt">
+                                                        <input type="radio" name="chat_icon" value="<?php echo esc_attr($ik); ?>" <?php checked($cico, $ik); ?> />
+                                                        <span><?php echo wp_kses_post($iv); ?></span>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+                                            <p class="lumi-fhint">Select the icon style for your chat widget button.</p>
+                                        </div>
+
                                         <div class="lumi-f2">
+                                            <div>
+                                                <label class="lumi-flb" for="lumi-ctheme">Widget Theme</label>
+                                                <select class="lumi-fin" id="lumi-ctheme" name="chat_theme">
+                                                    <?php $cth = !empty($cw['theme']) ? $cw['theme'] : 'auto';
+                                                    foreach (array('auto' => 'Auto', 'light' => 'Light', 'dark' => 'Dark') as $tk => $tv) : ?>
+                                                        <option value="<?php echo esc_attr($tk); ?>" <?php selected($cth, $tk); ?>><?php echo esc_html($tv); ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
                                             <div>
                                                 <label class="lumi-flb" for="lumi-cc">Widget colour</label>
                                                 <input class="lumi-fin" id="lumi-cc" type="text" name="chat_color" value="<?php echo esc_attr(!empty($cw['primaryColor']) ? $cw['primaryColor'] : '#fe87a4'); ?>" placeholder="#fe87a4" />
                                             </div>
-                                            <div>
-                                                <label class="lumi-flb" for="lumi-cp">Widget position</label>
-                                                <select class="lumi-fin" id="lumi-cp" name="chat_position">
-                                                    <?php foreach (array('bottom-right' => 'Bottom right', 'bottom-left' => 'Bottom left') as $pk => $pl) : ?>
-                                                        <option value="<?php echo esc_attr($pk); ?>" <?php selected(!empty($cw['position']) ? $cw['position'] : 'bottom-right', $pk); ?>><?php echo esc_html($pl); ?></option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                            </div>
                                         </div>
-                                        <div class="lumi-f1">
+
+                                        <div class="lumi-switches">
+                                            <?php foreach (array(
+                                                'chat_autoopen' => array('Auto-open on page load', !empty($cw['autoOpen'])),
+                                                'chat_mobile'   => array('Show on mobile devices', !isset($cw['showOnMobile']) || !empty($cw['showOnMobile'])),
+                                                'chat_sound'    => array('Sound notifications', !empty($cw['sound'])),
+                                                'chat_typing'   => array('Show typing indicators', !isset($cw['typing']) || !empty($cw['typing'])),
+                                            ) as $sk => $sv) : ?>
+                                                <label class="lumi-toggle">
+                                                    <input type="checkbox" name="<?php echo esc_attr($sk); ?>" value="1" <?php checked($sv[1]); ?> />
+                                                    <span class="lumi-tgl"></span>
+                                                    <span><?php echo esc_html($sv[0]); ?></span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                        </div>
+
+                                        <div class="lumi-fg">
                                             <label class="lumi-flb" for="lumi-cw">Welcome message</label>
                                             <input class="lumi-fin" id="lumi-cw" type="text" name="chat_welcome" maxlength="140" value="<?php echo esc_attr(!empty($cw['welcomeMessage']) ? $cw['welcomeMessage'] : ''); ?>" placeholder="Hi! Need a hand?" />
                                         </div>
-                                    </div>
-                                    <?php $ai_nav('chat'); ?>
-                                </section>
-                            <?php endif; ?>
+                                        <div class="lumi-fg">
+                                            <label class="lumi-flb" for="lumi-cph">Placeholder Text</label>
+                                            <input class="lumi-fin" id="lumi-cph" type="text" name="chat_placeholder" maxlength="80" value="<?php echo esc_attr(!empty($cw['placeholder']) ? $cw['placeholder'] : 'Type your message...'); ?>" />
+                                        </div>
+                                        <div class="lumi-fg">
+                                            <label class="lumi-flb" for="lumi-cdom">Allowed Domains <span class="lumi-fhint" style="display:inline;">(one per line)</span></label>
+                                            <textarea class="lumi-fin lumi-mono" id="lumi-cdom" name="chat_domains" rows="3"><?php echo esc_textarea(!empty($cw['allowedDomains']) ? (is_array($cw['allowedDomains']) ? implode("\n", $cw['allowedDomains']) : $cw['allowedDomains']) : lumitalk_store_url()); ?></textarea>
+                                            <p class="lumi-fhint">Your store domain is included. Upgrade to Professional for 1 custom domain, or Enterprise for unlimited.</p>
+                                        </div>
 
-                            <?php if (in_array('sms', $enabled_keys, true)) : ?>
-                                <section class="lumi-sp" data-sec="sms" hidden>
-                                    <h4 class="lumi-sph">SMS Settings</h4>
-                                    <p class="lumi-spsub">How your assistant opens a text conversation.</p>
-                                    <div class="lumi-sec-b">
-                                        <label class="lumi-flb" for="lumi-smsg">SMS greeting</label>
-                                        <input class="lumi-fin" id="lumi-smsg" type="text" name="sms_greeting" maxlength="160" value="<?php echo esc_attr($agv('sms_greeting')); ?>" placeholder="Hi! Reply here and our AI will help." />
-                                        <p class="lumi-fhint">A sending number is assigned in LumiTalk after setup.</p>
-                                    </div>
-                                    <?php $ai_nav('sms'); ?>
-                                </section>
-                            <?php endif; ?>
+                                        <details class="lumi-adv">
+                                            <summary>Widget Integration Code</summary>
+                                            <p class="lumi-fhint">This plugin injects the widget for you &mdash; no snippet needed. Use this only if you also want it on a non-WordPress site.</p>
+                                            <textarea class="lumi-fin lumi-mono" rows="3" readonly onclick="this.select();"><?php
+                                                // Built from a variable tag name so the snippet is displayed, never parsed.
+                                                $tagname = 'script';
+                                                echo esc_textarea(
+                                                    '<' . $tagname . ' async src="' . lumitalk_widget_src() . '"'
+                                                    . ' data-widget-key="' . (!empty($s['widget_key']) ? $s['widget_key'] : 'YOUR_WIDGET_KEY') . '"'
+                                                    . ' data-api-url="' . lumitalk_api_url() . '"></' . $tagname . '>'
+                                                );
+                                            ?></textarea>
+                                        </details>
+                                        <?php $ai_nav('chat'); ?>
+                                    </section>
+                                <?php endif; ?>
 
-                            <?php if (in_array('email', $enabled_keys, true)) : ?>
-                                <section class="lumi-sp" data-sec="email" hidden>
-                                    <h4 class="lumi-sph">Email Settings</h4>
-                                    <p class="lumi-spsub">The name and signature your assistant sends email under.</p>
-                                    <div class="lumi-sec-b">
-                                        <div class="lumi-f2">
+                                <?php if (in_array('sms', $enabled_keys, true)) : ?>
+                                    <section class="lumi-sp" data-sec="sms" hidden>
+                                        <h4 class="lumi-sph">SMS Configuration</h4>
+                                        <p class="lumi-spsub">Configure automated text messaging for customer support and notifications.</p>
+
+                                        <div class="lumi-notice warn">
+                                            <b>SMS Limited &mdash; 10DLC Registration Required</b>
+                                            <p>SMS messaging is limited to a few messages per day until 10DLC (10-Digit Long Code) registration is completed. This is a carrier requirement for business messaging in the US.</p>
+                                            <a class="lumi-b3 sm" href="<?php echo esc_url(lumitalk_app_base() . '/compliance/10dlc'); ?>" target="_blank" rel="noopener">Start Registration</a>
+                                        </div>
+
+                                        <?php $chan_persona('sms', 'SMS'); ?>
+
+                                        <div class="lumi-tabs" data-tabs="sms">
+                                            <button type="button" class="lumi-tab on" data-tab="messages">Messages</button>
+                                            <button type="button" class="lumi-tab" data-tab="behavior">Behavior</button>
+                                            <button type="button" class="lumi-tab" data-tab="keywords">Keywords</button>
+                                        </div>
+
+                                        <div class="lumi-tabp" data-tabp="messages">
+                                            <div class="lumi-fg">
+                                                <label class="lumi-flb" for="lumi-smsg">Initial SMS Welcome Message</label>
+                                                <textarea class="lumi-fin" id="lumi-smsg" name="sms_greeting" rows="2" maxlength="320"><?php echo esc_textarea($agv('sms_greeting', 'Welcome to ' . get_bloginfo('name') . '! Reply to this message for instant support. Text STOP to unsubscribe.')); ?></textarea>
+                                            </div>
+                                            <div class="lumi-fg">
+                                                <label class="lumi-flb" for="lumi-sauto">Auto-Reply Message (Outside Business Hours)</label>
+                                                <textarea class="lumi-fin" id="lumi-sauto" name="sms_autoreply" rows="2" maxlength="320"><?php echo esc_textarea($agv('sms_autoreply', "Thanks for your message! We're currently offline but will respond as soon as we're back.")); ?></textarea>
+                                            </div>
+                                            <div class="lumi-fg">
+                                                <label class="lumi-flb" for="lumi-sopt">Opt-Out Confirmation Message</label>
+                                                <textarea class="lumi-fin" id="lumi-sopt" name="sms_optout" rows="2" maxlength="320"><?php echo esc_textarea($agv('sms_optout', "You've been unsubscribed from SMS notifications. Reply START to re-subscribe.")); ?></textarea>
+                                            </div>
+                                            <div class="lumi-fg">
+                                                <label class="lumi-flb" for="lumi-serr">Error Message</label>
+                                                <textarea class="lumi-fin" id="lumi-serr" name="sms_error" rows="2" maxlength="320"><?php echo esc_textarea($agv('sms_error', "Sorry, we couldn't process your message. Please try again or call us.")); ?></textarea>
+                                            </div>
+                                        </div>
+
+                                        <div class="lumi-tabp" data-tabp="behavior" hidden>
+                                            <div class="lumi-switches">
+                                                <label class="lumi-toggle"><input type="checkbox" name="sms_afterhours" value="1" <?php checked(!empty($a['sms_afterhours'])); ?> /><span class="lumi-tgl"></span><span>Send the auto-reply outside business hours</span></label>
+                                                <label class="lumi-toggle"><input type="checkbox" name="sms_confirm" value="1" <?php checked(!isset($a['sms_confirm']) || !empty($a['sms_confirm'])); ?> /><span class="lumi-tgl"></span><span>Send a welcome message on first contact</span></label>
+                                            </div>
+                                        </div>
+
+                                        <div class="lumi-tabp" data-tabp="keywords" hidden>
+                                            <div class="lumi-fg">
+                                                <label class="lumi-flb" for="lumi-skw">Opt-Out Keywords</label>
+                                                <input class="lumi-fin" id="lumi-skw" type="text" name="sms_keywords" value="<?php echo esc_attr($agv('sms_keywords', 'STOP, UNSUBSCRIBE, CANCEL, END, QUIT')); ?>" />
+                                                <p class="lumi-fhint">Carriers require STOP to always work. Extra keywords are handled the same way.</p>
+                                            </div>
+                                        </div>
+                                        <?php $ai_nav('sms'); ?>
+                                    </section>
+                                <?php endif; ?>
+
+                                <?php if (in_array('email', $enabled_keys, true)) : ?>
+                                    <section class="lumi-sp" data-sec="email" hidden>
+                                        <h4 class="lumi-sph">Email Configuration</h4>
+                                        <p class="lumi-spsub">Set up email integration for customer support and automated responses.</p>
+                                        <?php $chan_persona('email', 'email'); ?>
+
+                                        <h5 class="lumi-subh">Connection</h5>
+                                        <?php
+                                        $em = isset($state['emailConnection']) && is_array($state['emailConnection']) ? $state['emailConnection'] : array();
+                                        if (!empty($em['address'])) : ?>
+                                            <div class="lumi-conn ok">
+                                                <div class="lumi-connrow"><span>Status</span><b class="lumi-green">&#127881; Email connected</b></div>
+                                                <div class="lumi-connrow"><span>Email Address</span><b><?php echo esc_html($em['address']); ?></b></div>
+                                                <?php if (!empty($em['provider'])) : ?><div class="lumi-connrow"><span>Provider</span><b><?php echo esc_html($em['provider']); ?></b></div><?php endif; ?>
+                                                <?php if (!empty($em['auth_method'])) : ?><div class="lumi-connrow"><span>Auth Method</span><b><?php echo esc_html($em['auth_method']); ?></b></div><?php endif; ?>
+                                            </div>
+                                        <?php else : ?>
+                                            <div class="lumi-notice">
+                                                <b>No mailbox connected yet</b>
+                                                <p>Connect Gmail, Outlook or any IMAP/SMTP mailbox so your AI can read and reply to customer email. You can do this now or right after setup.</p>
+                                                <a class="lumi-b3 sm" href="<?php echo esc_url(lumitalk_app_base() . '/settings/email'); ?>" target="_blank" rel="noopener">Connect a mailbox</a>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <div class="lumi-f2" style="margin-top:18px;">
                                             <div>
                                                 <label class="lumi-flb" for="lumi-efrom">From name</label>
                                                 <input class="lumi-fin" id="lumi-efrom" type="text" name="email_from" value="<?php echo esc_attr($agv('email_from', get_bloginfo('name'))); ?>" />
                                             </div>
                                             <div>
                                                 <label class="lumi-flb" for="lumi-esig">Signature</label>
-                                                <input class="lumi-fin" id="lumi-esig" type="text" name="email_signature" value="<?php echo esc_attr($agv('email_signature')); ?>" placeholder="The <?php echo esc_attr(get_bloginfo('name')); ?> team" />
+                                                <input class="lumi-fin" id="lumi-esig" type="text" name="email_signature" value="<?php echo esc_attr($agv('email_signature', 'The ' . get_bloginfo('name') . ' team')); ?>" />
                                             </div>
                                         </div>
-                                    </div>
-                                    <?php $ai_nav('email'); ?>
-                                </section>
-                            <?php endif; ?>
+                                        <?php $ai_nav('email'); ?>
+                                    </section>
+                                <?php endif; ?>
 
                             </div>
                             <aside class="lumi-two-side">
-                                <div class="lumi-sidelbl">Sections</div>
+                                <div class="lumi-sidelbl">&#128203; Sections</div>
                                 <?php foreach ($ai_secs as $sid => $sc) : ?>
                                     <button type="button" class="lumi-navi<?php echo ('global' === $sid) ? ' on' : ''; ?>" data-goto="<?php echo esc_attr($sid); ?>" data-navfor="<?php echo esc_attr($sid); ?>">
                                         <span><?php echo esc_html($sc[0]); ?></span>
@@ -1499,9 +1932,12 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                         <?php endif; ?>
                                     </button>
                                 <?php endforeach; ?>
+                                <div class="lumi-cfgstat">
+                                    <span>Configuration Status</span>
+                                    <b data-cfgstat>Complete</b>
+                                </div>
                             </aside>
                         </div>
-
                     <?php else : // review ?>
                         <input type="hidden" name="action" value="lumitalk_onb_launch" />
                         <?php
@@ -2093,6 +2529,101 @@ function lumitalk_admin_css() {
     .lumi-lang{display:inline-flex;align-items:center;gap:6px;border:1px solid #d1d5db;border-radius:999px;padding:7px 13px;font-size:12.5px;color:#374151;cursor:pointer;background:#fff;}
     .lumi-lang:has(input:checked){border-color:#ec4899;background:#fdf2f8;color:#be185d;font-weight:600;}
     .lumi-lang input{accent-color:#ec4899;}
+    /* ---- Agent picker ---- */
+    .lumi-apk-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px;}
+    .lumi-apk-h h5{margin:0;font-size:15px;font-weight:700;color:#111827;}
+    .lumi-apk-note{font-size:11.5px;color:#9ca3af;}
+    .lumi-arole .tg{display:block;font-size:11px;font-weight:600;color:#db2777;margin-bottom:6px;}
+    .lumi-showmore{display:block;margin:12px auto 0;background:#fff;border:1px solid #d1d5db;border-radius:999px;padding:7px 18px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;font-family:inherit;}
+    .lumi-showmore:hover{border-color:#ec4899;color:#be185d;background:#fdf2f8;}
+    .lumi-syncbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 14px;margin:20px 0 18px;}
+    .lumi-syncmsg{font-size:12px;color:#92400e;}
+    /* ---- shared form bits ---- */
+    .lumi-mono{font-family:Menlo,Consolas,monospace;font-size:12px;line-height:1.55;}
+    .lumi-subh{margin:26px 0 12px;font-size:14px;font-weight:700;color:#111827;padding-top:18px;border-top:1px solid #f3f4f6;}
+    .lumi-b3.sm,.lumi-b2.sm{padding:6px 14px;font-size:12px;}
+    .lumi-toggle{display:flex;align-items:center;gap:10px;font-size:13px;color:#374151;cursor:pointer;margin-bottom:10px;}
+    .lumi-toggle input{position:absolute;opacity:0;pointer-events:none;}
+    .lumi-tgl{position:relative;flex-shrink:0;width:36px;height:20px;border-radius:999px;background:#d1d5db;transition:.15s;}
+    .lumi-tgl:after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:999px;background:#fff;transition:.15s;}
+    .lumi-toggle input:checked+.lumi-tgl{background:#ec4899;}
+    .lumi-toggle input:checked+.lumi-tgl:after{transform:translateX(16px);}
+    .lumi-persona{border:1px solid #f3f4f6;border-radius:10px;padding:16px;margin:6px 0 16px;background:#fafafa;}
+    .lumi-syncrow{display:flex;gap:8px;flex-wrap:wrap;}
+    .lumi-switches{margin:16px 0;}
+    /* ---- Languages ---- */
+    .lumi-langbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;font-size:12.5px;color:#6b7280;}
+    .lumi-langadd{display:flex;gap:8px;align-items:center;}
+    .lumi-langadd .lumi-fin{width:auto;min-width:220px;padding:7px 10px;font-size:12.5px;}
+    .lumi-langlist{display:flex;flex-direction:column;gap:10px;}
+    .lumi-langcard{display:flex;gap:14px;border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fff;}
+    .lumi-langcard.primary{border-color:#f9a8d4;background:#fdf2f8;}
+    .lumi-langflag{font-size:26px;line-height:1;flex-shrink:0;}
+    .lumi-langbody{flex:1;min-width:0;}
+    .lumi-langtop{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+    .lumi-langtop b{font-size:13.5px;color:#111827;}
+    .lumi-badge{font-size:10px;font-weight:700;color:transparent;}
+    .lumi-badge.pri{background:#ec4899;color:#fff;border-radius:999px;padding:2px 9px;letter-spacing:.03em;}
+    .lumi-langcost{font-size:11.5px;font-weight:600;color:#6b7280;margin-left:auto;}
+    .lumi-lnk{background:none;border:0;color:#db2777;font-size:11.5px;font-weight:600;cursor:pointer;padding:0;font-family:inherit;text-decoration:underline;}
+    .lumi-x{background:none;border:0;color:#9ca3af;font-size:17px;line-height:1;cursor:pointer;padding:0 2px;font-family:inherit;}
+    .lumi-x:hover{color:#ef4444;}
+    .lumi-langcaps{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;color:#16a34a;}
+    .lumi-langtotal{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;background:#f9fafb;}
+    .lumi-langtotal b{display:block;font-size:13px;color:#111827;}
+    .lumi-langtotal span{font-size:11.5px;color:#6b7280;}
+    .lumi-langsum{text-align:right;}
+    .lumi-langsum b{font-size:20px;font-weight:800;color:#db2777;}
+    /* ---- Phone ---- */
+    .lumi-phonecard{border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:16px;margin-bottom:18px;}
+    .lumi-phonehead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
+    .lumi-phonehead b{font-size:13px;color:#166534;}
+    .lumi-phonenum{font-size:20px;font-weight:800;color:#111827;letter-spacing:.02em;}
+    .lumi-phonetags{display:flex;gap:6px;margin:8px 0 10px;}
+    .lumi-tag{background:#fff;border:1px solid #d1d5db;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;color:#374151;}
+    /* ---- Voices ---- */
+    .lumi-vfilters{display:flex;gap:8px;margin-bottom:12px;}
+    .lumi-vf{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #d1d5db;border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;font-family:inherit;}
+    .lumi-vf b{font-size:10.5px;color:#9ca3af;}
+    .lumi-vf.on{border-color:#ec4899;background:#fdf2f8;color:#be185d;}
+    .lumi-vf.on b{color:#db2777;}
+    .lumi-voices{max-height:340px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;}
+    .lumi-voice{position:relative;display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:12.5px;}
+    .lumi-voice:last-child{border-bottom:0;}
+    .lumi-voice:hover{background:#fafafa;}
+    .lumi-voice input{position:absolute;opacity:0;pointer-events:none;}
+    .lumi-voice:has(input:checked){background:#fdf2f8;}
+    .lumi-play{flex-shrink:0;width:24px;height:24px;border-radius:999px;border:1px solid #d1d5db;background:#fff;color:#db2777;font-size:9px;cursor:pointer;padding:0;font-family:inherit;}
+    .lumi-play.off{opacity:.35;cursor:default;display:inline-flex;align-items:center;justify-content:center;}
+    .lumi-vname{flex:1;font-weight:600;color:#111827;min-width:0;}
+    .lumi-vtags{display:flex;gap:5px;flex-wrap:wrap;}
+    .lumi-vtags i{font-style:normal;background:#f3f4f6;border-radius:4px;padding:2px 7px;font-size:10px;color:#6b7280;}
+    .lumi-vck{opacity:0;color:#ec4899;font-weight:800;}
+    .lumi-voice:has(input:checked) .lumi-vck{opacity:1;}
+    /* ---- Chat widget settings ---- */
+    .lumi-segs{display:flex;gap:8px;}
+    .lumi-seg{flex:1;position:relative;text-align:center;border:1px solid #d1d5db;border-radius:8px;padding:10px;font-size:12.5px;color:#374151;cursor:pointer;background:#fff;}
+    .lumi-seg input{position:absolute;opacity:0;pointer-events:none;}
+    .lumi-seg:has(input:checked){border-color:#ec4899;background:#fdf2f8;color:#be185d;font-weight:600;}
+    .lumi-icons{display:flex;gap:10px;}
+    .lumi-icopt{position:relative;width:52px;height:52px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d1d5db;border-radius:10px;font-size:22px;cursor:pointer;background:#fff;}
+    .lumi-icopt input{position:absolute;opacity:0;pointer-events:none;}
+    .lumi-icopt:has(input:checked){border-color:#ec4899;background:#fdf2f8;}
+    .lumi-adv{border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-top:8px;}
+    .lumi-adv>summary{cursor:pointer;font-size:12.5px;font-weight:600;color:#374151;}
+    /* ---- Notices + tabs ---- */
+    .lumi-notice{border:1px solid #e5e7eb;background:#f9fafb;border-radius:10px;padding:14px 16px;margin-bottom:18px;}
+    .lumi-notice.warn{border-color:#fde68a;background:#fffbeb;}
+    .lumi-notice b{display:block;font-size:13px;color:#111827;margin-bottom:4px;}
+    .lumi-notice p{margin:0 0 10px;font-size:12px;color:#6b7280;line-height:1.55;}
+    .lumi-notice a{display:inline-block;text-decoration:none;}
+    .lumi-tabs{display:flex;gap:4px;border-bottom:1px solid #e5e7eb;margin:18px 0 16px;}
+    .lumi-tab{background:none;border:0;border-bottom:2px solid transparent;padding:8px 14px;font-size:12.5px;font-weight:600;color:#6b7280;cursor:pointer;font-family:inherit;}
+    .lumi-tab.on{color:#be185d;border-bottom-color:#ec4899;}
+    /* ---- Sidebar status ---- */
+    .lumi-cfgstat{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding:10px 12px;border-top:1px solid #f3f4f6;font-size:11.5px;color:#9ca3af;}
+    .lumi-cfgstat b{color:#16a34a;font-size:12px;}
+    .lumi-cfgstat b.warn{color:#d97706;}
     /* Subscribe is a real submit button now (fires Stripe directly). */
     button.lumi-pc-btn{cursor:pointer;font-family:inherit;}
     .lumi-pc-btn.free{cursor:default;}
@@ -2204,11 +2735,23 @@ function lumitalk_admin_js() {
                 b.addEventListener("click", function(){ show(b.getAttribute("data-goto")); });
             });
 
+            function cfgStatus(){
+                var el = wrap.querySelector("[data-cfgstat]");
+                if (!el) { return; }
+                var pending = 0;
+                Array.prototype.forEach.call(wrap.querySelectorAll(".lumi-navi .lumi-dot"), function(d){
+                    if (!d.classList.contains("ok")) { pending++; }
+                });
+                el.textContent = pending ? (pending + " to complete") : "Complete";
+                el.classList.toggle("warn", pending > 0);
+            }
             function dot(id, ok){
                 var n = wrap.querySelector(".lumi-navi[data-navfor=" + id + "] .lumi-dot");
-                if (!n) { return; }
-                n.classList.toggle("ok", !!ok);
-                n.innerHTML = ok ? "✓" : "";
+                if (n) {
+                    n.classList.toggle("ok", !!ok);
+                    n.textContent = ok ? "✓" : "";
+                }
+                cfgStatus();
             }
 
             /* required-field completeness drives the sidebar check marks */
@@ -2276,6 +2819,172 @@ function lumitalk_admin_js() {
                     syncHoursDot();
                 });
             });
+
+            /* ---- Agent picker preloads the persona (everything stays editable) ---- */
+            function gfield(n){ return wrap.querySelector("[data-gf=" + n + "]"); }
+            Array.prototype.forEach.call(wrap.querySelectorAll("input[name=agent_role]"), function(r){
+                r.addEventListener("change", function(){
+                    if (!r.checked) { return; }
+                    var map = { desc: "data-desc", greeting: "data-greeting", instructions: "data-instructions" };
+                    Object.keys(map).forEach(function(k){
+                        var el = gfield(k), val = r.getAttribute(map[k]);
+                        if (el && val) { el.value = val; }
+                    });
+                    syncReq();
+                });
+            });
+            var showMore = wrap.querySelector("[data-showmore]");
+            if (showMore) {
+                showMore.addEventListener("click", function(){
+                    var extra = wrap.querySelectorAll(".lumi-arole.lumi-more");
+                    if (!extra.length) { return; }
+                    var opening = extra[0].hidden;
+                    Array.prototype.forEach.call(extra, function(c){ c.hidden = !opening; });
+                    showMore.textContent = opening ? "Show fewer agents" : "Show more agents (" + extra.length + ")";
+                });
+            }
+
+            /* ---- Global persona <-> per-channel persona ---- */
+            var PF = ["name", "greeting", "instructions"];
+            function globals(){
+                var g = {};
+                PF.forEach(function(k){ var el = gfield(k); g[k] = el ? el.value : ""; });
+                return g;
+            }
+            function fillChannel(block, g){
+                PF.forEach(function(k){
+                    var el = block.querySelector("[data-pf=" + k + "]");
+                    if (el) { el.value = g[k]; }
+                });
+            }
+            var copyAll = wrap.querySelector("[data-copyall]");
+            if (copyAll) {
+                copyAll.addEventListener("click", function(){
+                    var g = globals();
+                    Array.prototype.forEach.call(wrap.querySelectorAll(".lumi-persona"), function(b){ fillChannel(b, g); });
+                    var msg = wrap.querySelector(".lumi-syncmsg");
+                    if (msg) { msg.textContent = "Copied to all channels — every channel now matches the global persona."; }
+                });
+            }
+            Array.prototype.forEach.call(wrap.querySelectorAll("[data-sync]"), function(b){
+                b.addEventListener("click", function(){
+                    var block = wrap.querySelector(".lumi-persona[data-persona=" + b.getAttribute("data-chan") + "]");
+                    if (!block) { return; }
+                    if (b.getAttribute("data-sync") === "from") {
+                        fillChannel(block, globals());
+                    } else {
+                        PF.forEach(function(k){
+                            var src = block.querySelector("[data-pf=" + k + "]"), dst = gfield(k);
+                            if (src && dst) { dst.value = src.value; }
+                        });
+                        syncReq();
+                    }
+                });
+            });
+            Array.prototype.forEach.call(wrap.querySelectorAll("[data-persona-toggle]"), function(t){
+                t.addEventListener("change", function(){
+                    var block = wrap.querySelector(".lumi-persona[data-persona=" + t.getAttribute("data-persona-toggle") + "]");
+                    if (block) { block.hidden = !t.checked; }
+                });
+            });
+
+            /* ---- Languages: first is free, each additional is billed monthly ---- */
+            var LANG_PRICE = 25;
+            var langList = wrap.querySelector(".lumi-langlist");
+            var langPick = wrap.querySelector("#lumi-langpick");
+            function langRefresh(){
+                if (!langList) { return; }
+                var cards = langList.querySelectorAll(".lumi-langcard");
+                Array.prototype.forEach.call(cards, function(c, i){
+                    var first = (i === 0);
+                    c.classList.toggle("primary", first);
+                    var badge = c.querySelector("[data-pribadge]");
+                    if (badge) { badge.textContent = first ? "Primary" : ""; badge.classList.toggle("pri", first); }
+                    var cost = c.querySelector(".lumi-langcost");
+                    if (cost) { cost.textContent = first ? "Free" : "+$" + LANG_PRICE + "/mo"; }
+                    var pri = c.querySelector("[data-setpri]"); if (pri) { pri.hidden = first; }
+                    var del = c.querySelector("[data-langdel]"); if (del) { del.hidden = first; }
+                });
+                var n = cards.length, extra = Math.max(0, n - 1), total = extra * LANG_PRICE;
+                var e1 = wrap.querySelector("[data-lang-extra]");      if (e1) { e1.textContent = "$" + total + "/mo"; }
+                var e2 = wrap.querySelector("[data-lang-total]");      if (e2) { e2.textContent = "$" + total + "/mo"; }
+                var e3 = wrap.querySelector("[data-lang-count]");      if (e3) { e3.textContent = n + " language" + (n === 1 ? "" : "s") + " selected"; }
+                var e4 = wrap.querySelector("[data-lang-extracount]"); if (e4) { e4.textContent = extra === 0 ? "First language free" : extra + " additional"; }
+                dot("languages", n > 0);
+            }
+            var langAdd = wrap.querySelector("[data-langadd]");
+            if (langAdd && langPick && langList) {
+                langAdd.addEventListener("click", function(){
+                    var code = langPick.value, tpl = langList.querySelector(".lumi-langcard");
+                    if (!code || !tpl || langList.querySelector(".lumi-langcard[data-lang=" + code + "]")) { return; }
+                    var opt = langPick.options[langPick.selectedIndex];
+                    var txt = (opt.textContent || "").trim();
+                    var sp = txt.indexOf(" ");
+                    var flag = sp > 0 ? txt.slice(0, sp) : "";
+                    var nm = sp > 0 ? txt.slice(sp + 1) : txt;
+                    var c = tpl.cloneNode(true);
+                    c.setAttribute("data-lang", code);
+                    var hid = c.querySelector("input[type=hidden]"); if (hid) { hid.value = code; }
+                    var fl = c.querySelector(".lumi-langflag"); if (fl) { fl.textContent = flag; }
+                    var tt = c.querySelector(".lumi-langtop b"); if (tt) { tt.textContent = flag + " " + nm; }
+                    var caps = c.querySelectorAll(".lumi-langcaps span");
+                    if (caps.length === 4) {
+                        caps[2].textContent = "✓ SMS in " + nm;
+                        caps[3].textContent = "✓ Email in " + nm;
+                    }
+                    langList.appendChild(c);
+                    langRefresh();
+                });
+            }
+            if (langList) {
+                langList.addEventListener("click", function(ev){
+                    var t = ev.target;
+                    if (!t || !t.getAttribute) { return; }
+                    var card = t.closest ? t.closest(".lumi-langcard") : null;
+                    if (!card) { return; }
+                    if (t.hasAttribute("data-langdel")) {
+                        if (langList.querySelectorAll(".lumi-langcard").length > 1) { card.parentNode.removeChild(card); langRefresh(); }
+                    } else if (t.hasAttribute("data-setpri")) {
+                        langList.insertBefore(card, langList.firstElementChild);
+                        langRefresh();
+                    }
+                });
+                langRefresh();
+            }
+
+            /* ---- Voice library: gender filter + preview playback ---- */
+            var preview = null;
+            Array.prototype.forEach.call(wrap.querySelectorAll("[data-preview]"), function(p){
+                p.addEventListener("click", function(ev){
+                    ev.preventDefault(); ev.stopPropagation();
+                    if (preview) { preview.pause(); }
+                    preview = new Audio(p.getAttribute("data-preview"));
+                    preview.play().catch(function(){});
+                });
+            });
+            Array.prototype.forEach.call(wrap.querySelectorAll(".lumi-vf"), function(b){
+                b.addEventListener("click", function(){
+                    var f = b.getAttribute("data-vf");
+                    Array.prototype.forEach.call(wrap.querySelectorAll(".lumi-vf"), function(x){ x.classList.toggle("on", x === b); });
+                    Array.prototype.forEach.call(wrap.querySelectorAll(".lumi-voice"), function(v){
+                        v.hidden = (f !== "all" && v.getAttribute("data-gender") !== f);
+                    });
+                });
+            });
+
+            /* ---- Sub-tabs inside a section (SMS messages/behavior/keywords) ---- */
+            Array.prototype.forEach.call(wrap.querySelectorAll(".lumi-tab"), function(b){
+                b.addEventListener("click", function(){
+                    var bar = b.parentNode, sect = bar.parentNode;
+                    Array.prototype.forEach.call(bar.querySelectorAll(".lumi-tab"), function(x){ x.classList.toggle("on", x === b); });
+                    Array.prototype.forEach.call(sect.querySelectorAll("[data-tabp]"), function(p){
+                        p.hidden = (p.getAttribute("data-tabp") !== b.getAttribute("data-tab"));
+                    });
+                });
+            });
+
+            syncReq();
+            cfgStatus();
         });
     })();';
 }
