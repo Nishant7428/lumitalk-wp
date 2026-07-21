@@ -7,6 +7,8 @@
  * Author: LumiTalk
  * Author URI: https://lumitalk.ai
  * License: GPL-2.0+
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: lumitalk-ai
  * Requires at least: 5.8
  * Requires PHP: 7.4
  *
@@ -212,6 +214,113 @@ function lumitalk_source_label($source = null) {
 }
 
 // Build a normalized catalog (items) from the detected source.
+/**
+ * Customers for the connected store, normalized for LumiTalk.
+ * WooCommerce and EDD keep their own customer records; a plain WordPress site
+ * falls back to registered users.
+ *
+ * @param string|null $source Detected source, or null to detect.
+ * @param int         $limit  Maximum records.
+ * @return array
+ */
+function lumitalk_collect_customers($source = null, $limit = 200) {
+    $source = $source ?: lumitalk_detect_source();
+    $out    = array();
+
+    if ('woocommerce' === $source && function_exists('wc_get_orders')) {
+        // Billing details on orders cover guests too, which wc_get_customers misses.
+        $seen   = array();
+        $orders = wc_get_orders(array('limit' => $limit, 'orderby' => 'date', 'order' => 'DESC'));
+        foreach ($orders as $o) {
+            $email = $o->get_billing_email();
+            if (!$email || isset($seen[ $email ])) { continue; }
+            $seen[ $email ] = true;
+            $out[] = array(
+                'external_id' => (string) ($o->get_customer_id() ? $o->get_customer_id() : $email),
+                'email'       => $email,
+                'phone'       => $o->get_billing_phone(),
+                'first_name'  => $o->get_billing_first_name(),
+                'last_name'   => $o->get_billing_last_name(),
+                'city'        => $o->get_billing_city(),
+                'state'       => $o->get_billing_state(),
+                'postal_code' => $o->get_billing_postcode(),
+                'country'     => $o->get_billing_country(),
+                'status'      => 'active',
+            );
+        }
+    } elseif ('edd' === $source && function_exists('edd_get_customers')) {
+        foreach ((array) edd_get_customers(array('number' => $limit)) as $c) {
+            $name  = isset($c->name) ? trim($c->name) : '';
+            $parts = $name ? explode(' ', $name, 2) : array('', '');
+            $out[] = array(
+                'external_id' => (string) (isset($c->id) ? $c->id : (isset($c->email) ? $c->email : '')),
+                'email'       => isset($c->email) ? $c->email : null,
+                'first_name'  => isset($parts[0]) ? $parts[0] : null,
+                'last_name'   => isset($parts[1]) ? $parts[1] : null,
+                'status'      => 'active',
+            );
+        }
+    }
+
+    if (!$out) {
+        // Plain WordPress (or the above returned nothing): registered users.
+        foreach (get_users(array('number' => $limit, 'fields' => array('ID', 'user_email', 'display_name'))) as $u) {
+            $parts = $u->display_name ? explode(' ', $u->display_name, 2) : array('', '');
+            $out[] = array(
+                'external_id' => (string) $u->ID,
+                'email'       => $u->user_email,
+                'first_name'  => isset($parts[0]) ? $parts[0] : null,
+                'last_name'   => isset($parts[1]) ? $parts[1] : null,
+                'status'      => 'active',
+            );
+        }
+    }
+    return $out;
+}
+
+/**
+ * Orders / purchases for the connected store, normalized for LumiTalk.
+ *
+ * @param string|null $source Detected source, or null to detect.
+ * @param int         $limit  Maximum records.
+ * @return array
+ */
+function lumitalk_collect_orders($source = null, $limit = 200) {
+    $source = $source ?: lumitalk_detect_source();
+    $out    = array();
+
+    if ('woocommerce' === $source && function_exists('wc_get_orders')) {
+        foreach (wc_get_orders(array('limit' => $limit, 'orderby' => 'date', 'order' => 'DESC')) as $o) {
+            $created = $o->get_date_created();
+            $out[]   = array(
+                'external_id'        => (string) $o->get_id(),
+                'transaction_type'   => 'order',
+                'reference_number'   => $o->get_order_number(),
+                'status'             => $o->get_status(),
+                'total_amount'       => (float) $o->get_total(),
+                'currency'           => $o->get_currency(),
+                'transaction_date'   => $created ? $created->date('c') : null,
+                'fulfillment_status' => $o->get_status(),
+            );
+        }
+    } elseif ('edd' === $source && function_exists('edd_get_payments')) {
+        foreach ((array) edd_get_payments(array('number' => $limit)) as $p) {
+            $pid = isset($p->ID) ? $p->ID : (isset($p->id) ? $p->id : null);
+            if (!$pid) { continue; }
+            $out[] = array(
+                'external_id'      => (string) $pid,
+                'transaction_type' => 'order',
+                'reference_number' => function_exists('edd_get_payment_number') ? (string) edd_get_payment_number($pid) : (string) $pid,
+                'status'           => function_exists('edd_get_payment_status') ? edd_get_payment_status($pid) : (isset($p->post_status) ? $p->post_status : null),
+                'total_amount'     => function_exists('edd_get_payment_amount') ? (float) edd_get_payment_amount($pid) : null,
+                'currency'         => function_exists('edd_get_currency') ? edd_get_currency() : 'USD',
+                'transaction_date' => isset($p->post_date_gmt) ? gmdate('c', strtotime($p->post_date_gmt)) : null,
+            );
+        }
+    }
+    return $out;
+}
+
 function lumitalk_collect_catalog($source = null, $limit = 200) {
     $source = $source ?: lumitalk_detect_source();
     $items  = array();
@@ -728,6 +837,8 @@ add_action('admin_post_lumitalk_connect', function () {
                 'siteName'  => get_bloginfo('name'),
                 'storeData' => lumitalk_collect_store_details(),
                 'catalog'   => lumitalk_collect_catalog($source, 500),
+                'customers' => lumitalk_collect_customers($source, 500),
+                'orders'    => lumitalk_collect_orders($source, 500),
             )),
         ));
     }
@@ -1006,6 +1117,37 @@ add_action('admin_post_lumitalk_onb_launch', function () {
     lumitalk_redirect_with('lumitalk_launched', '1');
 });
 
+// Re-read this site's catalogue and push it to LumiTalk, so the assistant answers
+// from current products, orders and customers.
+add_action('admin_post_lumitalk_resync', function () {
+    if (!current_user_can('manage_options')) { wp_die('Unauthorized'); }
+    check_admin_referer('lumitalk_resync');
+
+    $s = lumitalk_get_settings();
+    if (empty($s['connected']) || empty($s['embed_token'])) {
+        lumitalk_redirect_with('lumitalk_error', 'Not connected to LumiTalk.');
+    }
+
+    // WordPress has no API for LumiTalk to pull from, so the current products,
+    // customers and orders are pushed with the request.
+    $source = lumitalk_detect_source();
+    $body   = array(
+        'catalog'   => lumitalk_collect_catalog($source, 500),
+        'customers' => lumitalk_collect_customers($source, 500),
+        'orders'    => lumitalk_collect_orders($source, 500),
+        'storeData' => lumitalk_collect_store_details(),
+    );
+    $r = lumitalk_embed_post('/marketplace/embed/sync', $body);
+
+    // Counts change after a sync, so drop the cached catalogue snapshots.
+    delete_transient('lumitalk_phone_numbers');
+
+    if (!is_array($r) || empty($r['success'])) {
+        lumitalk_redirect_with('lumitalk_error', 'Could not refresh store data. Please try again.');
+    }
+    lumitalk_redirect_with('lumitalk_synced', '1');
+});
+
 // AJAX: search numbers available to provision, so the picker can list them without
 // a page reload (same endpoint the LumiTalk app's phone picker uses).
 add_action('wp_ajax_lumitalk_phone_search', function () {
@@ -1068,7 +1210,6 @@ function lumitalk_render_admin_page() {
     // phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only display flags set by our own redirects.
     $notice_error  = isset($_GET['lumitalk_error']) ? sanitize_text_field(wp_unslash($_GET['lumitalk_error'])) : '';
     $notice_disc   = isset($_GET['lumitalk_disconnected']);
-    $notice_launch = isset($_GET['lumitalk_launched']);
     $billing       = isset($_GET['lumitalk_billing']) ? sanitize_key($_GET['lumitalk_billing']) : '';
     $step          = isset($_GET['step']) ? sanitize_key($_GET['step']) : '';
     // phpcs:enable WordPress.Security.NonceVerification.Recommended
@@ -1091,7 +1232,7 @@ function lumitalk_render_admin_page() {
     }
 
     if ($launched && $step === '' && $billing === '') {
-        lumitalk_render_dashboard($s, $state, $notice_launch);
+        lumitalk_render_dashboard($s, $state);
         return;
     }
 
@@ -2544,7 +2685,7 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
 }
 
 // -- Native dashboard (post-launch) ------------------------------------------
-function lumitalk_render_dashboard($s, $state, $notice_launch) {
+function lumitalk_render_dashboard($s, $state) {
     $ch = isset($state['channels']) && is_array($state['channels']) ? $state['channels'] : array();
     $enabled = array();
     foreach (array('chat', 'voice', 'sms', 'email') as $c) { if (!empty($ch[$c]['enabled'])) { $enabled[] = ucfirst($c); } }
@@ -2563,15 +2704,102 @@ function lumitalk_render_dashboard($s, $state, $notice_launch) {
         </div></div>
 
         <div class="lumi-body"><div class="lumi-panel">
-            <?php if ($notice_launch) : ?><div class="lumi-alert ok">&#127881; Your AI assistant is live!</div><?php endif; ?>
+            <?php
+            // phpcs:disable WordPress.Security.NonceVerification.Recommended -- display-only flags from our own redirects.
+            $synced     = isset($_GET['lumitalk_synced']);
+            $sync_error = isset($_GET['lumitalk_error']) ? sanitize_text_field(wp_unslash($_GET['lumitalk_error'])) : '';
+            // phpcs:enable WordPress.Security.NonceVerification.Recommended
+            ?>
+            <?php if ($synced) : ?><div class="lumi-alert ok">Store data refreshed &mdash; your assistant is using the latest products, orders and customers.</div><?php endif; ?>
+            <?php if ($sync_error) : ?><div class="lumi-alert err"><?php echo esc_html($sync_error); ?></div><?php endif; ?>
             <h1><?php echo esc_html($app_name); ?></h1>
             <p class="lumi-sub">Your assistant is set up. Manage conversations in the LumiTalk agent panel.</p>
+
+            <?php
+            $st = isset($state['stats']) && is_array($state['stats']) ? $state['stats'] : array();
+            $sv = function ($k, $d = 0) use ($st) { return isset($st[$k]) ? (int) $st[$k] : $d; };
+            $bych = (isset($st['byChannel']) && is_array($st['byChannel'])) ? $st['byChannel'] : array();
+            $last = !empty($st['lastActivityAt']) ? $st['lastActivityAt'] : '';
+            ?>
+            <div class="lumi-kpis">
+                <div class="lumi-kpi">
+                    <em>Conversations today</em>
+                    <strong><?php echo esc_html((string) $sv('conversationsToday')); ?></strong>
+                </div>
+                <div class="lumi-kpi">
+                    <em>Last 7 days</em>
+                    <strong><?php echo esc_html((string) $sv('conversationsWeek')); ?></strong>
+                </div>
+                <div class="lumi-kpi">
+                    <em>This month</em>
+                    <strong><?php echo esc_html((string) $sv('conversationsMonth')); ?></strong>
+                </div>
+                <div class="lumi-kpi">
+                    <em>All time</em>
+                    <strong><?php echo esc_html((string) $sv('conversationsTotal')); ?></strong>
+                </div>
+            </div>
+
+            <?php if ($sv('conversationsTotal') > 0 || $sv('callsTotal') > 0) : ?>
+                <div class="lumi-bych">
+                    <?php
+                    $chan_icon = array('voice' => 'phone', 'chat' => 'chat', 'sms' => 'sms', 'email' => 'mail');
+                    foreach (array('chat', 'voice', 'sms', 'email') as $cka) :
+                        if (empty($ch[$cka]['enabled']) && empty($bych[$cka])) { continue; } ?>
+                        <span class="lumi-bychip">
+                            <?php echo wp_kses(lumitalk_icon($chan_icon[$cka]), lumitalk_svg_allowed()); ?>
+                            <b><?php echo esc_html((string) (isset($bych[$cka]) ? (int) $bych[$cka] : 0)); ?></b>
+                            <?php echo esc_html(ucfirst($cka)); ?>
+                        </span>
+                    <?php endforeach; ?>
+                    <?php if ($sv('activeThreads') > 0) : ?>
+                        <span class="lumi-bychip open"><b><?php echo esc_html((string) $sv('activeThreads')); ?></b> open now</span>
+                    <?php endif; ?>
+                </div>
+            <?php else : ?>
+                <p class="lumi-sub" style="margin-top:-4px;">No conversations yet &mdash; they will appear here as soon as customers start talking to your assistant.</p>
+            <?php endif; ?>
 
             <div class="lumi-stats">
                 <div class="lumi-stat"><em>Storefront widget</em><strong class="<?php echo $widget_live ? 'live' : 'off'; ?>"><?php echo $widget_live ? 'Live' : 'Off'; ?></strong></div>
                 <div class="lumi-stat"><em>Plan</em><strong><?php echo esc_html(ucfirst($plan)); ?></strong></div>
                 <div class="lumi-stat"><em>Channels</em><strong><?php echo esc_html($enabled ? implode(', ', $enabled) : 'Chat'); ?></strong></div>
                 <div class="lumi-stat"><em>Products</em><strong><?php echo esc_html((string) $know); ?></strong></div>
+                <?php if ($sv('callsTotal') > 0) : ?>
+                    <div class="lumi-stat"><em>Voice calls</em><strong><?php echo esc_html((string) $sv('callsTotal')); ?></strong></div>
+                <?php endif; ?>
+                <?php if ($last) : ?>
+                    <div class="lumi-stat"><em>Last activity</em><strong><?php
+                        $ts = strtotime($last);
+                        echo esc_html($ts ? human_time_diff($ts, time()) . ' ago' : '&mdash;');
+                    ?></strong></div>
+                <?php endif; ?>
+            </div>
+
+            <?php
+            $kn        = isset($state['knowledge']) && is_array($state['knowledge']) ? $state['knowledge'] : array();
+            $kv        = function ($k) use ($kn) { return isset($kn[$k]) ? (int) $kn[$k] : 0; };
+            $last_sync = !empty($kn['lastSyncAt']) ? strtotime($kn['lastSyncAt']) : 0;
+            $resync    = wp_nonce_url(admin_url('admin-post.php?action=lumitalk_resync'), 'lumitalk_resync');
+            ?>
+            <div class="lumi-sync">
+                <div class="lumi-sync-h">
+                    <div>
+                        <strong>Store data synced to your AI</strong>
+                        <span><?php
+                            echo $last_sync
+                                ? 'Last refreshed ' . esc_html(human_time_diff($last_sync, time())) . ' ago'
+                                : 'Synced when you connected';
+                        ?> &bull; <?php echo esc_html(lumitalk_source_label()); ?></span>
+                    </div>
+                    <a class="lumi-b secondary" href="<?php echo esc_url($resync); ?>">&#8635; Refresh store data</a>
+                </div>
+                <div class="lumi-counts">
+                    <div><b><?php echo esc_html((string) $kv('productCount')); ?></b><span>Products</span></div>
+                    <div><b><?php echo esc_html((string) $kv('orderCount')); ?></b><span>Orders</span></div>
+                    <div><b><?php echo esc_html((string) $kv('customerCount')); ?></b><span>Customers</span></div>
+                </div>
+                <p class="lumi-fhint">Your assistant answers from this data. Refresh after adding products or fulfilling orders.</p>
             </div>
 
             <div class="lumi-actions">
@@ -2953,6 +3181,24 @@ function lumitalk_admin_css() {
     .lumi-lang{display:inline-flex;align-items:center;gap:6px;border:1px solid #d1d5db;border-radius:999px;padding:7px 13px;font-size:12.5px;color:#374151;cursor:pointer;background:#fff;}
     .lumi-lang:has(input:checked){border-color:#ec4899;background:#fdf2f8;color:#be185d;font-weight:600;}
     .lumi-lang input{accent-color:#ec4899;}
+    /* ---- Dashboard synced-data panel ---- */
+    .lumi-sync{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:16px 0;background:#fff;}
+    .lumi-sync-h{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+    .lumi-sync-h strong{display:block;font-size:13px;color:#111827;}
+    .lumi-sync-h span{display:block;font-size:11.5px;color:#6b7280;margin-top:2px;}
+    .lumi-sync .lumi-counts{margin-bottom:8px;}
+    .lumi-sync .lumi-fhint{margin:0;}
+    /* ---- Dashboard KPIs ---- */
+    .lumi-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin:14px 0;}
+    .lumi-kpi{border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;background:#fff;}
+    .lumi-kpi em{display:block;font-style:normal;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
+    .lumi-kpi strong{display:block;font-size:26px;font-weight:800;color:#db2777;line-height:1.1;}
+    .lumi-bych{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px;}
+    .lumi-bychip{display:inline-flex;align-items:center;gap:6px;border:1px solid #e5e7eb;border-radius:999px;padding:5px 12px;font-size:12px;color:#6b7280;background:#fff;}
+    .lumi-bychip .lumi-ic{width:14px;height:14px;color:#db2777;}
+    .lumi-bychip b{color:#111827;font-weight:700;}
+    .lumi-bychip.open{border-color:#bbf7d0;background:#f0fdf4;color:#166534;}
+    .lumi-bychip.open b{color:#166534;}
     /* ---- Inline icons (Heroicons 24/outline, inherit colour + size) ---- */
     .lumi-ic{width:1.25em;height:1.25em;display:inline-block;vertical-align:-.22em;flex-shrink:0;}
     .lumi-arole .ico .lumi-ic{width:26px;height:26px;color:#db2777;vertical-align:middle;}

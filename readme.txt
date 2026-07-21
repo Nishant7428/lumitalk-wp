@@ -34,33 +34,46 @@ the account and connecting happens from wp-admin when you click "Connect to Lumi
 == External services ==
 
 This plugin connects to **LumiTalk**, a third-party SaaS platform, to provide the AI
-assistant and chat widget. Connecting is optional and is only initiated when you click
-"Connect to LumiTalk" in wp-admin.
+assistant and chat widget. Connecting is optional and only ever starts when you click
+"Connect to LumiTalk" in wp-admin. Nothing is sent before that.
 
-What data is sent, and when:
+What is sent, and when:
 
-* **When you click Connect (one time / on reconnect):** your store name, the
-  administrator email, your site URL, currency, timezone, store address, and your
-  product/order/customer counts — used to create your LumiTalk account and pre-fill
-  onboarding. For WooCommerce, a read-only WooCommerce REST API key is generated and
-  sent so LumiTalk can read your catalog; for other platforms a normalized product
-  catalog (titles, descriptions, prices, categories, images) is sent directly.
-* **Native setup (via API):** after connecting, the setup screens run natively in
-  wp-admin and call the LumiTalk API (authenticated with a token issued to your store)
-  to save your channel, plan, and assistant choices. Nothing is embedded in an iframe.
-* **Agent panel:** a "Open Agent Panel" button opens the LumiTalk conversations/inbox
-  app in a new browser tab (signed in via a one-time token) — it is not embedded.
-* **Storefront chat widget:** once enabled, a widget script is loaded from LumiTalk on
-  your public pages so visitors can chat with the AI. Visitor chat messages are sent to
-  LumiTalk to generate replies.
+* **When you click Connect, and whenever you click "Refresh store data":** your store
+  name, administrator email, site URL, currency, timezone and store address, plus your
+  catalog and commerce records so the assistant can answer questions about them:
+  * products/downloads (titles, descriptions, prices, SKUs, categories, images, stock);
+  * **customers** (name, email, phone, and billing city/state/postcode/country);
+  * **orders** (order number, status, total, currency and date).
+  For WooCommerce a read-only WooCommerce REST API key is also generated and sent so
+  LumiTalk can keep the catalog in sync; other platforms push the data directly.
+  Because customer and order records include personal data, only connect if you are
+  comfortable sharing them with LumiTalk under their privacy policy, and make sure your
+  own privacy policy reflects it.
+* **Native setup (via the LumiTalk API, authenticated with a token issued to your
+  store):** saving your channel, plan, assistant, business-hours and policy choices.
+  Nothing is embedded in an iframe.
+* **Agent templates and voice library:** the setup screen requests the list of assistant
+  templates and available voices so you can choose one. The template request sends no
+  site data; the voice request sends only your LumiTalk application identifier.
+* **Phone number search:** if you choose a phone number for the voice channel, the area
+  code or state you type is sent to LumiTalk to list available numbers.
+* **Mailbox connection (optional):** choosing "Connect Gmail" or "Connect Outlook" opens
+  the provider's own sign-in page in a pop-up. The mailbox credentials are handled by
+  the provider and LumiTalk — they are never entered into, or stored by, this plugin.
+* **Paid plans (optional):** selecting a paid plan sends you to Stripe Checkout, hosted
+  by Stripe, to complete payment.
+* **Storefront chat widget:** once you enable it, a widget script is loaded from
+  LumiTalk on your public pages, and visitor chat messages are sent to LumiTalk to
+  generate replies. The widget only loads after you connect and enable it.
 
-No data is sent to LumiTalk until you connect, and the widget only loads after you
-connect and enable it.
+You can disconnect at any time from the plugin's Settings tab, which removes the stored
+credentials from your site.
 
 This service is provided by LumiTalk. By connecting you agree to their terms:
 
-* Terms of Service: https://lumitalk.ai/terms
-* Privacy Policy: https://lumitalk.ai/privacy
+* Terms of Service: https://lumitalk.ai/terms-of-service
+* Privacy Policy: https://lumitalk.ai/privacy-policy
 
 == Installation ==
 
