@@ -2096,19 +2096,70 @@ function lumitalk_render_onboarding($s, $state, $step, $notice_error, $billing) 
                                         <h5 class="lumi-subh">Connection</h5>
                                         <?php
                                         $em = isset($state['emailConnection']) && is_array($state['emailConnection']) ? $state['emailConnection'] : array();
+                                        if (empty($em['address']) && isset($state['channels']['email']) && is_array($state['channels']['email']) && !empty($state['channels']['email']['address'])) {
+                                            $ce = $state['channels']['email'];
+                                            $em = array(
+                                                'address'     => $ce['address'],
+                                                'provider'    => isset($ce['oauth_provider']) ? $ce['oauth_provider'] : '',
+                                                'auth_method' => (isset($ce['auth_method']) && 'oauth' === $ce['auth_method']) ? 'OAuth' : 'SMTP/IMAP',
+                                                'smtp_host'   => isset($ce['smtp_host']) ? $ce['smtp_host'] : '',
+                                                'smtp_port'   => isset($ce['smtp_port']) ? $ce['smtp_port'] : '',
+                                                'imap_host'   => isset($ce['imap_host']) ? $ce['imap_host'] : '',
+                                                'imap_port'   => isset($ce['imap_port']) ? $ce['imap_port'] : '',
+                                                'verified'    => !empty($ce['connection_verified']),
+                                            );
+                                        }
+                                        $prov_label = array('google' => 'Gmail (Google Workspace)', 'microsoft' => 'Outlook / Microsoft 365');
+                                        $oauth_base = lumitalk_api_url() . '/api/email-oauth';
+                                        $oauth_args = array(
+                                            'application_id' => isset($s['application_id']) ? $s['application_id'] : '',
+                                            'channel'        => 'email',
+                                            'step'           => 'assistant',
+                                            'redirect_origin' => home_url(),
+                                        );
                                         if (!empty($em['address'])) : ?>
                                             <div class="lumi-conn ok">
-                                                <div class="lumi-connrow"><span>Status</span><b class="lumi-green">&#127881; Email connected</b></div>
+                                                <div class="lumi-connrow"><span>Status</span><b class="lumi-green"><?php echo !empty($em['verified']) ? '&#10003; Verified' : 'Connected'; ?></b></div>
                                                 <div class="lumi-connrow"><span>Email Address</span><b><?php echo esc_html($em['address']); ?></b></div>
-                                                <?php if (!empty($em['provider'])) : ?><div class="lumi-connrow"><span>Provider</span><b><?php echo esc_html($em['provider']); ?></b></div><?php endif; ?>
-                                                <?php if (!empty($em['auth_method'])) : ?><div class="lumi-connrow"><span>Auth Method</span><b><?php echo esc_html($em['auth_method']); ?></b></div><?php endif; ?>
+                                                <div class="lumi-connrow"><span>Provider</span><b><?php
+                                                    $pv = isset($em['provider']) ? $em['provider'] : '';
+                                                    echo esc_html(isset($prov_label[$pv]) ? $prov_label[$pv] : ('' !== $pv ? ucfirst($pv) : 'IMAP / SMTP'));
+                                                ?></b></div>
+                                                <div class="lumi-connrow"><span>Auth Method</span><b><?php echo esc_html(!empty($em['auth_method']) ? $em['auth_method'] : 'SMTP/IMAP'); ?></b></div>
+                                                <?php if (!empty($em['smtp_host'])) : ?>
+                                                    <div class="lumi-connrow"><span>SMTP</span><b><?php echo esc_html($em['smtp_host'] . (!empty($em['smtp_port']) ? ':' . $em['smtp_port'] : '')); ?></b></div>
+                                                <?php endif; ?>
+                                                <?php if (!empty($em['imap_host'])) : ?>
+                                                    <div class="lumi-connrow"><span>IMAP</span><b><?php echo esc_html($em['imap_host'] . (!empty($em['imap_port']) ? ':' . $em['imap_port'] : '')); ?></b></div>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="lumi-syncrow" style="margin-top:10px;">
+                                                <button type="button" class="lumi-b3 sm" data-emailoauth="<?php echo esc_url(add_query_arg($oauth_args, $oauth_base . '/google/authorize')); ?>">Reconnect Gmail</button>
+                                                <button type="button" class="lumi-b3 sm" data-emailoauth="<?php echo esc_url(add_query_arg($oauth_args, $oauth_base . '/microsoft/authorize')); ?>">Use Outlook instead</button>
                                             </div>
                                         <?php else : ?>
                                             <div class="lumi-notice">
                                                 <b>No mailbox connected yet</b>
-                                                <p>Connect Gmail, Outlook or any IMAP/SMTP mailbox so your AI can read and reply to customer email. You can do this now or right after setup.</p>
-                                                <a class="lumi-b3 sm" href="<?php echo esc_url(lumitalk_app_base() . '/settings/email'); ?>" target="_blank" rel="noopener">Connect a mailbox</a>
+                                                <p>Connect a mailbox so your AI can read and reply to customer email. You can do this now or right after setup &mdash; your other channels work either way.</p>
                                             </div>
+                                            <div class="lumi-provgrid">
+                                                <button type="button" class="lumi-prov" data-emailoauth="<?php echo esc_url(add_query_arg($oauth_args, $oauth_base . '/google/authorize')); ?>">
+                                                    <span class="ic"><?php echo wp_kses(lumitalk_icon('mail'), lumitalk_svg_allowed()); ?></span>
+                                                    <b>Connect Gmail</b>
+                                                    <span>Google Workspace or personal Gmail</span>
+                                                </button>
+                                                <button type="button" class="lumi-prov" data-emailoauth="<?php echo esc_url(add_query_arg($oauth_args, $oauth_base . '/microsoft/authorize')); ?>">
+                                                    <span class="ic"><?php echo wp_kses(lumitalk_icon('mail'), lumitalk_svg_allowed()); ?></span>
+                                                    <b>Connect Outlook</b>
+                                                    <span>Microsoft 365 or Outlook.com</span>
+                                                </button>
+                                                <a class="lumi-prov" href="<?php echo esc_url(lumitalk_app_base() . '/settings/email'); ?>" target="_blank" rel="noopener">
+                                                    <span class="ic"><?php echo wp_kses(lumitalk_icon('cog'), lumitalk_svg_allowed()); ?></span>
+                                                    <b>Other (IMAP / SMTP)</b>
+                                                    <span>Set up in LumiTalk, where credentials are encrypted</span>
+                                                </a>
+                                            </div>
+                                            <p class="lumi-fhint" data-emailmsg></p>
                                         <?php endif; ?>
 
                                         <div class="lumi-f2" style="margin-top:18px;">
@@ -3009,6 +3060,14 @@ function lumitalk_admin_css() {
     .lumi-icopt:has(input:checked){border-color:#ec4899;background:#fdf2f8;}
     .lumi-adv{border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-top:8px;}
     .lumi-adv>summary{cursor:pointer;font-size:12.5px;font-weight:600;color:#374151;}
+    /* ---- Mailbox provider choices ---- */
+    .lumi-provgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:10px;}
+    .lumi-prov{display:block;text-align:left;text-decoration:none;border:1px solid #d1d5db;border-radius:10px;padding:14px;background:#fff;cursor:pointer;font-family:inherit;}
+    .lumi-prov:hover{border-color:#ec4899;background:#fdf2f8;}
+    .lumi-prov .ic{display:block;margin-bottom:8px;}
+    .lumi-prov .ic .lumi-ic{width:22px;height:22px;color:#db2777;}
+    .lumi-prov b{display:block;font-size:13px;color:#111827;margin-bottom:3px;}
+    .lumi-prov span:not(.ic){display:block;font-size:11px;color:#6b7280;line-height:1.45;}
     /* ---- Notices + tabs ---- */
     .lumi-notice{border:1px solid #e5e7eb;background:#f9fafb;border-radius:10px;padding:14px 16px;margin-bottom:18px;}
     .lumi-notice.warn{border-color:#fde68a;background:#fffbeb;}
@@ -3445,6 +3504,41 @@ function lumitalk_admin_js() {
             }
             Array.prototype.forEach.call(wrap.querySelectorAll("input[name=phone_number]"), function(r){
                 r.addEventListener("change", function(){ dot("phone", true); });
+            });
+
+            /* ---- Mailbox connect: OAuth in a popup, same as the app. The callback
+               posts back to this window, so no credentials pass through here. ---- */
+            var emailMsg = wrap.querySelector("[data-emailmsg]");
+            Array.prototype.forEach.call(wrap.querySelectorAll("[data-emailoauth]"), function(b){
+                b.addEventListener("click", function(ev){
+                    ev.preventDefault();
+                    var w = 560, h = 680;
+                    var y = window.top.outerHeight / 2 + window.top.screenY - (h / 2);
+                    var x = window.top.outerWidth / 2 + window.top.screenX - (w / 2);
+                    var pop = window.open(b.getAttribute("data-emailoauth"), "lumitalkEmailOAuth",
+                        "width=" + w + ",height=" + h + ",top=" + y + ",left=" + x);
+                    if (!pop) {
+                        if (emailMsg) { emailMsg.textContent = "Please allow pop-ups for this site, then try again."; }
+                        return;
+                    }
+                    if (emailMsg) { emailMsg.textContent = "Waiting for you to finish signing in…"; }
+                    function onMsg(e){
+                        if (!e.data || e.data.type !== "oauth_success") { return; }
+                        window.removeEventListener("message", onMsg);
+                        try { pop.close(); } catch (err) {}
+                        if (emailMsg) { emailMsg.textContent = "Connected " + (e.data.email || "") + " — reloading…"; }
+                        window.location.reload();
+                    }
+                    window.addEventListener("message", onMsg);
+                    // If the window is closed without finishing, stop waiting.
+                    var poll = setInterval(function(){
+                        if (pop.closed) {
+                            clearInterval(poll);
+                            window.removeEventListener("message", onMsg);
+                            if (emailMsg && emailMsg.textContent.indexOf("Connected") === -1) { emailMsg.textContent = ""; }
+                        }
+                    }, 800);
+                });
             });
 
             syncReq();
